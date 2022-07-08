@@ -13,6 +13,8 @@ from agents.low_level_controller.controller import VehiclePIDController
 from agents.tools.misc import get_speed
 from agents.low_level_controller.controller import IntelligentDriverModel
 
+from .utils import traj2action
+
 MODULE_WORLD = 'WORLD'
 MODULE_HUD = 'HUD'
 MODULE_INPUT = 'INPUT'
@@ -112,9 +114,16 @@ class CarlaGymEnv(gym.Env):
 
         self.observation_space = gym.spaces.Box(low=-1, high=1, shape=(self.time_step + 1, 9),
                                                 dtype=np.float32)
-        action_low = np.array([-1])
-        action_high = np.array([1])
-        self.action_space = gym.spaces.Box(low=action_low, high=action_high, dtype=np.float32)
+        
+        
+        """Changes for BDPL: action space is ac_candidates's space"""
+#        action_low = np.array([-1])
+#        action_high = np.array([1])
+#        self.action_space = gym.spaces.Box(low=action_low, high=action_high, dtype=np.float32)
+        self.T_ac_candidates = int(cfg.T_ACTION_CANDIDATES / cfg.CARLA.DT)#cfg.T_ACTION_CANDIDATES: length of trajectories used for action(secondes), must be less than 4.9
+        action_low = np.array([-999.]*(self.T_ac_candidates*2))#-1 because we use 'yaw_change' for action feature 
+        action_high = np.array([999.]*(self.T_ac_candidates*2))
+        self.action_space = gym.spaces.Box(low = action_low, high=action_high, shape=([self.T_ac_candidates*2]), dtype=np.float32)
         # [cn, ..., c1, c0, normalized yaw angle, normalized speed error] => ci: coefficients
         self.state = np.zeros_like(self.observation_space.sample())
 
@@ -146,6 +155,9 @@ class CarlaGymEnv(gym.Env):
             self.dt = float(cfg.CARLA.DT)
         else:
             self.dt = 0.05
+            
+        #BDP use
+        self.bdpl_path_list = None
 
     def seed(self, seed=None):
         pass
@@ -432,7 +444,12 @@ class CarlaGymEnv(gym.Env):
 
         return lstm_obs.reshape(self.observation_space.shape[1], -1).transpose()  # state
 
-    def step(self, action=None):
+    def external_sampler(self):
+        """
+        Split the previous 'step' function into two part. The first part generated trajectories without action,
+        the second part select the respective trajectory to the input action.
+        So, 'external_sampler()' and 'step()' need to be called in turn. (Firstly this one, then 'step())
+        """
         self.n_step += 1
 
         self.actor_enumerated_dict['EGO'] = {'NORM_S': [], 'NORM_D': [], 'S': [], 'D': [], 'SPEED': []}
@@ -453,9 +470,82 @@ class CarlaGymEnv(gym.Env):
         acc = math.sqrt(acc_vec.x ** 2 + acc_vec.y ** 2 + acc_vec.z ** 2)
         psi = math.radians(self.ego.get_transform().rotation.yaw)
         ego_state = [self.ego.get_location().x, self.ego.get_location().y, speed, acc, psi, temp, self.max_s]
-        fpath, self.lanechange, off_the_road = self.motionPlanner.run_step_single_path(ego_state, self.f_idx, df_n=action, Tf=5,
-                                                                         Vf_n=-1)
+#        fpath, self.lanechange, off_the_road = self.motionPlanner.run_step_single_path(ego_state, self.f_idx, df_n=action, Tf=5,
+#                                                                         Vf_n=-1)#original code
+        
+        """#wait after test
+        bdpl_path_list=[]
+        _, bdpl_path_list1= self.motionPlanner.run_step_without_update_self_path(ego_state, self.f_idx,0)#target speed not set
+        _, bdpl_path_list2 = self.motionPlanner.run_step_without_update_self_path(ego_state, self.f_idx,-1)#target speed not set
+        _, bdpl_path_list3 = self.motionPlanner.run_step_without_update_self_path(ego_state, self.f_idx,1)#target speed not set
+        bdpl_path_list = []+bdpl_path_list1+bdpl_path_list2+bdpl_path_list3
+        #TODO: set off the road
+        off_the_road = False
+        """
+        self.bdpl_path_list = []
+        path1, lanechange1, off_the_road1 = self.motionPlanner.run_step_single_path_without_update_self_path(ego_state, self.f_idx, df_n=0, Tf=5,
+                                                                         Vf_n=-1)#original code        
+        path2, lanechange2, off_the_road2 = self.motionPlanner.run_step_single_path_without_update_self_path(ego_state, self.f_idx, df_n=-1, Tf=5,
+                                                                         Vf_n=-1)#original code    
+        path3, lanechange3, off_the_road3 = self.motionPlanner.run_step_single_path_without_update_self_path(ego_state, self.f_idx, df_n=1, Tf=5,
+                                                                         Vf_n=-1)#original code    
+        self.bdpl_path_list = [path1,path2,path3]
+        self.tmp_lanechange = [lanechange1,lanechange2,lanechange3]
+        self.tmp_off_the_road = [off_the_road1,off_the_road2,off_the_road3]
+        
+        self.bdpl_path_list
+        
+        
+        #save some parames
+                #some variable defined in external_sampler
+        self.external_sampler_variable = temp,init_speed
+
+        # convert path in bdpl_path_list to vector
+        
+        #note, the path.x and path.y are the only information in global coordinates
+        #the path.yaw is the yaw of s-axis of the frenet coordinate, so they are the same
+        #path.s,path.s_d,path.s_dd are also the same because they are of frenet coordinate
+#        def process_path_list_as_acs(path_list,T_ac_candidates,current_yaw,yaw_scale = 1,speed_scale = 1):
+#            # must match action space
+#            # the shape of the ac_candidates is determined by 'Tf' parameter.
+#            ac_candidates = [np.concatenate([(np.array(tmp_path.yaw)[1:T_ac_candidates+1] - np.array(tmp_path.yaw)[0:T_ac_candidates] )*yaw_scale, np.array(tmp_path.s_dd)[:T_ac_candidates]*speed_scale]) for tmp_path in path_list]
+#            return np.array(ac_candidates)
+
+        def process_path_list_as_acs(path_list,T_ac_candidates,yaw_scale = 1,speed_scale = 1):
+            # must match action space
+            # the shape of the ac_candidates is determined by 'Tf' parameter.
+            # TODO
+            ac_candidates = [traj2action(tmp_path,T_ac_candidates,self.dt) for tmp_path in path_list]
+            return np.array(ac_candidates)
+        
+
+
+        return process_path_list_as_acs(self.bdpl_path_list,self.T_ac_candidates),len(self.bdpl_path_list)
+        
+    def step(self, action=None):
+        #for dev
+        if self.bdpl_path_list is None:
+            # so external_sampler not called
+            # to be compatible with original:
+            self.external_sampler()
+        temp,init_speed = self.external_sampler_variable
+        """
+        Though action space is box, here the action passed in should be int, because,
+        in Boltzmann Distribution Policy Learning, the env.step need not return all infomation to candidate actions,
+        they just need to return some feature. The model just do 'select', not create.
+        """
+        assert type(action) is int or np.int32 or np.int64, "error action %d is not type int" % action
+        fpath = self.bdpl_path_list[action]
+        self.bdpl_path_list = []#erase
+        self.lanechange = self.tmp_lanechange[action]
+        off_the_road = self.tmp_off_the_road[action]
+        self.motionPlanner.update_self_path(fpath)
+        
+        
+        
+        
         wps_to_go = len(fpath.t) - 3  # -2 bc len gives # of items not the idx of last item + 2wp controller is used
+        
         self.f_idx = 1
 
         """
@@ -463,6 +553,7 @@ class CarlaGymEnv(gym.Env):
                 ************************************************* Controller *********************************************************
                 **********************************************************************************************************************
         """
+
         # initialize flags
         collision = track_finished = False
         elapsed_time = lambda previous_time: time.time() - previous_time
@@ -499,7 +590,8 @@ class CarlaGymEnv(gym.Env):
             """
 
             if self.world_module.args.play_mode != 0:
-                for i in range(len(fpath.t)):
+#                for i in range(len(fpath.t)):
+                for i in range(self.T_ac_candidates):
                     self.world_module.points_to_draw['path wp {}'.format(i)] = [
                         carla.Location(x=fpath.x[i], y=fpath.y[i]),
                         'COLOR_ALUMINIUM_0']

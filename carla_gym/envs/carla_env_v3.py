@@ -1,6 +1,10 @@
 """
 @author: Majid Moghadam
 UCSC - ASL
+
+Modified for trajectory-based planning from v1
+
+
 """
 
 import gym
@@ -455,6 +459,16 @@ class CarlaGymEnv(gym.Env):
         ego_state = [self.ego.get_location().x, self.ego.get_location().y, speed, acc, psi, temp, self.max_s]
         fpath, self.lanechange, off_the_road = self.motionPlanner.run_step_single_path(ego_state, self.f_idx, df_n=action, Tf=5,
                                                                          Vf_n=-1)
+        v3_path_list=[]
+        
+        _, v3_path_list1= self.motionPlanner.run_step_without_update_self_path(ego_state, self.f_idx,0)#target speed not set
+#        for i in v3_path_list1
+        
+        
+        _, v3_path_list2 = self.motionPlanner.run_step_without_update_self_path(ego_state, self.f_idx,-1)#target speed not set
+        _, v3_path_list3 = self.motionPlanner.run_step_without_update_self_path(ego_state, self.f_idx,1)#target speed not set
+        v3_path_list = []+v3_path_list1+v3_path_list2+v3_path_list3
+
         wps_to_go = len(fpath.t) - 3  # -2 bc len gives # of items not the idx of last item + 2wp controller is used
         self.f_idx = 1
 
@@ -496,13 +510,22 @@ class CarlaGymEnv(gym.Env):
                     **********************************************************************************************************************
                     *********************************************** Draw Waypoints *******************************************************
                     **********************************************************************************************************************
-            """
+            """            
+            
+            self.world_module.points_to_draw={}
+            def add_draw_path(fpath,name_prefix='',color='COLOR_ALUMINIUM_0'):
+                for i in range(len(fpath.t)):
+                    self.world_module.points_to_draw[name_prefix+'path wp {}'.format(i)] = [
+                        carla.Location(x=fpath.x[i], y=fpath.y[i]),
+                        color]
 
             if self.world_module.args.play_mode != 0:
-                for i in range(len(fpath.t)):
-                    self.world_module.points_to_draw['path wp {}'.format(i)] = [
-                        carla.Location(x=fpath.x[i], y=fpath.y[i]),
-                        'COLOR_ALUMINIUM_0']
+                for i in v3_path_list:
+                    add_draw_path(i,'path list {}'.format(i),color='COLOR_ALUMINIUM_0')
+                add_draw_path(fpath,'',color='COLOR_ORANGE_0')
+                    
+                    
+                    
                 self.world_module.points_to_draw['ego'] = [self.ego.get_location(), 'COLOR_SCARLET_RED_0']
                 self.world_module.points_to_draw['waypoint ahead'] = carla.Location(x=cmdWP[0], y=cmdWP[1])
                 self.world_module.points_to_draw['waypoint ahead 2'] = carla.Location(x=cmdWP2[0], y=cmdWP2[1])

@@ -1389,7 +1389,7 @@ class ModuleWorld:
 
         # Dynamic actors
         # Render points_to_draw
-        self.render_points_to_draw(radius=5)
+        self.render_points_to_draw(radius=1)
         self._render_vehicles(surface, vehicles, self.map_image.world_to_pixel)
         self._render_walkers(surface, walkers, self.map_image.world_to_pixel)
 

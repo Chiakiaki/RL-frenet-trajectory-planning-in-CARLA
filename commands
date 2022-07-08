@@ -1,0 +1,282 @@
+
+
+
+
+git clone https://github.com/MajidMoghadam2006/RL-frenet-trajectory-planning-in-CARLA.git
+cd RL-frenet-trajectory-planning-in-CARLA/
+#delete tensorflow install in requirements.txt(need tensorflow)
+pip install -r requirements.txt
+cd agents/reinforcement_learning
+pip install -e .
+
+
+git remote rm origin
+git remote add origin https://github.com/Chiakiaki/RL-frenet-trajectory-planning-in-CARLA.git
+
+
+git add ./*.py
+git add ./*.yaml
+
+#on run====================================================================
+~/CARLA_0.9.9.2/CarlaUE4.sh -carla-server -fps=20 -world-port=2000 -windowed -ResX=1280 -ResY=720 -carla-no-hud -quality-level=Low
+~/CARLA_0.9.9.2/CarlaUE4.sh -carla-server -fps=20 -world-port=2000 -windowed -ResX=1280 -ResY=720 -carla-no-hud -quality-level=Low
+DISPLAY= ~/CARLA_0.9.9.2/CarlaUE4.sh -opengl
+
+export CARLA_ROOT=~/CARLA_0.9.9.2/
+export PYTHONPATH="${CARLA_ROOT}/PythonAPI/carla/dist/carla-0.9.9-py3.7-linux-x86_64.egg":${PYTHONPATH}
+cd ~/RL-frenet-trajectory-planning-in-CARLA/
+python3 run.py --agent_id=1 --env=CarlaGymEnv-v4 --test
+
+train args:
+--cfg_file=tools/cfgs/config_bdp.yaml --agent_id=1111 --env=CarlaGymEnv-v4  --play_mode=1
+--cfg_file=tools/cfgs/config_a2c.yaml --agent_id=111 --env=CarlaGymEnv-v1  --play_mode=1
+
+
+
+python3 monitor_plot.py --agent_ids 111 --window_size 10 --colors red --lr a2c --alpha 0.1 --n_steps 1e7
+python3 monitor_plot.py --agent_ids 1111 --window_size 10 --colors red --lr bdp --alpha 0.1 --n_steps 1e7
+python3 monitor_plot.py --agent_ids 111 1111 --window_size 10 --colors red blue --lr a2c bdp --alpha 0.1 --n_steps 1e7
+
+python3 run.py --cfg_file=tools/cfgs/config.yaml --agent_id=1 --env=CarlaGymEnv-v1 
+python3 run.py --cfg_file=tools/cfgs/config_a2c.yaml --agent_id=111 --env=CarlaGymEnv-v1  --play_mode=1
+
+
+
+
+
+
+
+
+
+
+export CARLA_ROOT=~/CARLA_0.9.10.1/
+export LEADERBOARD_ROOT=~/CARLA_0.9.10.1/leaderboard/
+export SCENARIO_RUNNER_ROOT=~/CARLA_0.9.10.1/scenario_runner/
+export PYTHONPATH="${CARLA_ROOT}/PythonAPI/carla/":"${SCENARIO_RUNNER_ROOT}":"${LEADERBOARD_ROOT}":"${CARLA_ROOT}/PythonAPI/carla/dist/carla-0.9.10-py3.7-linux-x86_64.egg":${PYTHONPATH}
+
+cd ${CARLA_ROOT}
+./CarlaUE4.sh -quality-level=low -world-port=2000 -resx=800 -resy=600
+
+DISPLAY= ~/CARLA_0.9.10.1/CarlaUE4.sh -opengl -quality-level=epic -world-port=2000 -resx=800 -resy=600
+
+
+--scenarios=/home/sry/CARLA_0.9.10.1/leaderboard/data/all_towns_traffic_scenarios_public.json --routes=/home/sry/CARLA_0.9.10.1/leaderboard/team_code_rs/routes_town04.xml --repetitions=1 --track=SENSORS --checkpoint=/home/sry/CARLA_0.9.10.1/leaderboard/data/results.json --agent=/home/sry/CARLA_0.9.10.1/leaderboard/leaderboard/autoagents/human_agent.py --agent-config= --debug=1
+
+--scenarios=/home/sry/CARLA_0.9.10.1/leaderboard/data/all_towns_traffic_scenarios_public.json --routes=/home/sry/CARLA_0.9.10.1/leaderboard/team_code_rs/routes_town04.xml --repetitions=1 --track=SENSORS --checkpoint=/home/sry/CARLA_0.9.10.1/leaderboard/data/results.json --agent=/home/sry/CARLA_0.9.10.1/leaderboard/team_code_rs/roaming_agent_for_challenge.py
+ --agent-config= --debug=1
+
+
+
+cd ${LEADERBOARD_ROOT}
+
+--mode adaptive_test --action maneuver --steps 100000 --render 1
+--mode adaptive_test --action trajectory --steps 100000 --render 1 --load_dir ./save/working2
+
+export PYTHONPATH=~/CARLA_0.9.10.1/PythonAPI/carla/dist/carla-0.9.10.1-py3.7-linux-x86_64.egg:~/CARLA_0.9.10.1/PythonAPI/carla/:~/CARLA_0.9.10.1/PythonAPI/
+
+
+export PYTHONPATH=~/CARLA_0.9.12/PythonAPI/carla/dist/carla-0.9.12-py3.7-linux-x86_64.egg:~/CARLA_0.9.12/PythonAPI/carla/:~/CARLA_0.9.12/PythonAPI/
+
+export VK_ICD_FILENAMES="/usr/share/vulkan/icd.d/nvidia_icd.json"
+~/CARLA_0.9.12/CarlaUE4.sh -quality-level=Low
+
+Mimic a related paper
+give 'modal'
+'large number of ... with lower effort' is better. 'Infinite' is too strong, and not validate-able.
+use(1),(2),(3)...to highlight contribution. maybe, multi-modality, expantability, interpretability.  Give clear and accurate difinition. Then plan experiment associate with each '1','2','3'. Previously, the motivation is too general, maybe appliable to many autonomous driving algorithm. 
+In next report, write the first section, addressing the problem.
+"pg and ac both have advantage and disadvantage to implement Boltzmann ..., so we report the two."
+
+globalprotect connect --portal vpnconnect.manchester.ac.uk -u p28367rs
+ssh p28367rs@10.99.203.52
+ssh -X p28367rs@csf3.itservices.manchester.ac.uk
+look space: du
+
+
+To start an interactive session:
+qrsh -l short
+qrsh -l v100 bash
+qrsh -l v100 -pe smp.pe 8 bash
+
+sudo prime-select intel
+
+lr 1e-4,gradient clipping 10, prioritized replay, double Q
+original paper lr 1e-3 cliping 6
+
+-> debug for 'only-update-critic'
+
+
+export LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libGLEW.so
+
+other things:
+regularly check email.
+more thoughts (consequences)
+import email ()
+
+
+
+SDL_VIDEODRIVER=offscreen SDL_HINT_CUDA_DEVICE=0 ~/CARLA_0.9.11/CarlaUE4.sh -ResX=800 -ResY=600 -nosound -windowed -opengl
+(DISPLAY= ~/CARLA_0.9.11/CarlaUE4.sh -opengl &)
+
+(DISPLAY= ~/CARLA_0.9.11/CarlaUE4.sh -nullrhi -opengl &)
+~/CARLA_0.9.8/CarlaUE4.sh Town04 --no-rendering
+~/CARLA_0.9.11/CarlaUE4.sh Town04 --no-rendering
+DISPLAY= ~/CARLA_0.9.11/CarlaUE4.sh -opengl
+
+
+python3 ~/CARLA_0.9.11/PythonAPI/examples/automatic_control.py --steps 10
+module load libs/gcc/glx/1.5 libs/gcc/glew/2.1.0 libs/gcc/glm/0.9.9.4 libs/gcc/glog/0.4.0 libs/cuda/11.1.1 apps/anaconda3/5.2.0/bin
+
+
+export PYTHONPATH=~/CARLA_0.9.11/PythonAPI/carla/dist/carla-0.9.11-py3.7-linux-x86_64.egg:~/CARLA_0.9.11/PythonAPI/carla/:~/CARLA_0.9.11/PythonAPI/
+
+Insufficient drivers or hardware
+Cannot create OpenGL contex
+
+export PYTHONPATH=/home/sry/CARLA_0.9.8/PythonAPI/carla/dist/carla-0.9.8-py3.5-linux-x86_64.egg:/home/sry/CARLA_0.9.8/PythonAPI/carla/:/home/sry/CARLA_0.9.8/PythonAPI/
+
+export PYTHONPATH=/home/sry/CARLA_0.9.6/PythonAPI/carla/dist/carla-0.9.6-py3.5-linux-x86_64.egg:/home/sry/CARLA_0.9.6/PythonAPI/carla/:/home/sry/CARLA_0.9.6/PythonAPI/
+
+export PYTHONPATH=/home/sry/CARLA_0.9.7.4/PythonAPI/carla/dist/carla-0.9.7-py3.5-linux-x86_64.egg:/home/sry/CARLA_0.9.7.4/PythonAPI/carla/:/home/sry/CARLA_0.9.7.4/PythonAPI/
+
+
+pip install py_trees
+conda install shapely
+
+
+module load apps/anaconda3/5.2.0/bin
+python3 -m pip install -U pygame --user
+
+mkdir libjpeg
+cd libjpeg/
+wget https://jpegclub.org/support/files/jpegsrc.v8d1.tar.gz
+tar -zxf jpegsrc.v8d1.tar.gz
+cd jpeg-8d1/
+./configure --prefix=/mnt/iusers01/fatpou01/compsci01/p28367rs/libjpeg/jpeg-8d1
+make
+make install
+make test
+export LD_LIBRARY_PATH=~/libjpeg/jpeg-8d1/lib
+
+python train_pg_f18.py CartPole-v0 -n 100 -b 1000 -e 1 -dna --exp_name sb_no_rtg_dna --render
+
+
+reinstall with anaconda python3.5 with tensorflow
+
+
+
+docker run --runtime=nvidia -it --rm tensorflow/tensorflow:latest-gpu bash
+
+docker run --runtime=nvidia -it --rm tensorflow/tensorflow:latest-gpu bash
+
+
+Use the command docker exec -it <container name> /bin/bash to get a bash shell in the container.
+
+Give docker the rights to access the X-Server with:
+xhost +local:docker
+docker run --runtime=nvidia -it  -e DISPLAY=$DISPLAY --rm -v /tmp/.X11-unix/:/tmp/.X11-unix jonasrothfuss/promp bash
+
+======================
+<how to read a poem> Edward Hirsck
+
+face++: S__[常用]
+
+
+
+ssh -CAXY test.sunruoyu.brc@bj-a.brainpp.ml
+
+
+ipython notebook
+ssh -f -N -L 127.0.0.1:1317:127.0.0.1:8889 test.sunruoyu.brc@bj-a.brainpp.ml
+ssh -f -N -L 127.0.0.1:1316:127.0.0.1:6006 test.sunruoyu.brc@bj-a.brainpp.ml
+
+
+
+
+
+sudo scp -r test.sunruoyu.brc@bj-a.brainpp.ml:/home/sunruoyu/PCDetection/models/sunruoyu/SSD-Tensorflow/datasets /home
+
+
+
+
+============================
+
+
+ssh -CAXY test.sunruoyu.brc@brain.megvii-inc.com
+msm update
+cd ~/PCDetection/models/sunruoyu/voc0712.fastercnn_v8.res101
+ipython notebook
+ssh -f -N -L 127.0.0.1:1314:127.0.0.1:8888 test.sunruoyu.brc@brain.megvii-inc.com
+ssh -f -N -L 127.0.0.1:1315:127.0.0.1:6006 test.sunruoyu.brc@brain.megvii-inc.com
+
+
+sudo chmod -R 777 /home/sunruoyu1/
+sudo chmod -R 777 /opt/megdl
+
+ sshfs -C -o transform_symlinks -o follow_symlinks test.sunruoyu.brc@brain.megvii-inc.com:/opt/megdl /opt/megdl
+
+ sshfs -C -o transform_symlinks -o follow_symlinks test.sunruoyu.brc@brain.megvii-inc.com:/home/sunruoyu/PCDetection /home/sunruoyu1/PCDetection
+
+ sshfs -C -o transform_symlinks -o follow_symlinks test.sunruoyu.brc@brain.megvii-inc.com:/home/sunruoyu/.local/share/jupyter/runtime/ /home/sry/QAQ
+
+
+
+export PYTHONPATH=$PYTHONPATH:/opt/megdl/MegSkull/megskull/
+export PYTHONPATH=$PYTHONPATH:/opt/megdl/MegHair/meghair/
+export PYTHONPATH=$PYTHONPATH:/opt/megdl/MegBrain/megbrain/
+
+source activate py35
+ipython kernel --ip=10.204.1.65
+ipython kernel
+scp test.sunruoyu.brc@brain.megvii-inc.com:/home/sunruoyu/.local/share/jupyter/runtime/kernel-13104.json /run/user/1000/jupyter/
+cd /run/user/1000/jupyter/
+for port in $(cat kernel-13104.json | grep '_port' | grep -o '[0-9]\+'); do ssh test.sunruoyu.brc@brain.megvii-inc.com -f -N -L $port:127.0.0.1:$port
+ipython qtconsole --existing ./kernel-?????.json
+
+
+
+find / -name *kernel-9896*
+test.sunruoyu.brc@brain.megvii-inc.com:/home/sunruoyu/.local/share/jupyter/runtime/kernel-9896.json
+/home/sry/.ssh
+
+ssh -f -S none -L 127.0.0.1:45490:127.0.0.1:45490 test.sunruoyu.brc@brain.megvii-inc.com 
+ssh -f -N -S none -L 127.0.0.1:33199:127.0.0.1:33199 test.sunruoyu.brc@brain.megvii-inc.com (这个会kernel die）
+ssh -f -S none-L 127.0.0.1:33199:127.0.0.1:33199 test.sunruoyu.brc@brain.megvii-inc.com
+ould not open ssh tunnel. The error was:
+Tunnel 'ssh  -p 44977 -f -S none -L 127.0.0.1:33373:127.0.0.1:33199 test.sunruoyu.brc@brain.megvii-inc.com sleep 10' failed to start
+Tunnel 'ssh  -p 36507 -f -S none -L 127.0.0.1:43461:10.204.1.65:32903 test.sunruoyu.brc@brain.megvii-inc.com sleep 10' failed to start
+
+
+
+
+
+	sudo cp -r cudnn510/include/cudnn.h /usr/local/cuda/include
+	sudo cp -r cudnn510/lib64/libcudnn* /usr/local/cuda/lib64
+
+voc:
+/unsullied/sharefs/g:research_detection/GeneralDetection/VOC/VOC/VOCdevkit/VOC2007
+
+
+
+global qaq
+qaq = 0
+def py_debug(*args):
+    global qaq
+    from IPython import embed
+    qaq = qaq+1
+    if qaq == 1:
+        embed()
+    return True
+
+with tf.control_dependencies(tf.py_func(py_debug,[tensor1,tensor2],[bool])):
+	tensor1 = tensor1+1
+	tensor1 = tensor1-1
+
+
+export CUDA_VISEBLE_DEVICES='1'
+
+python3 train_ssd_network.py --max_number_of_steps=600000 --dataset_dir='./humanv4-dataset/train' --dataset_name='humanv4' --num_classes=2 --train_dir='/home/sunruoyu/PCDetection/models/sunruoyu/SSD-Tensorflow/dev_log_humanv4' --learning_rate=3e-3 --model_name=ssd_300_vgg
+
+python3 main.py --dataset celebA --train --input_height=218 --input_width=178 --output_height=218 --output_width=178
+
+python3 main.py --dataset fake_step --train --input_height=100 --input_width=120 --output_height=100 --output_width=120 --epoch=600

@@ -10,6 +10,16 @@ Ref:
 
 - [Optimal trajectory generation for dynamic street scenarios in a Frenet Frame](https://www.youtube.com/watch?v=Cj6tAQe7UCY)
 
+
+
+Used by Ruoyu Sun,
+following functions are added:
+    run_step_single_path_without_update_self_path
+    run_step_without_update_self_path
+    update_self_path
+    frenet_optimal_planning_twice
+
+
 """
 
 import numpy as np
@@ -330,6 +340,13 @@ class FrenetPlanner:
         generate a single frenet path based on the current and terminal frenet state values
         input: ego's current frenet state and terminal frenet values (lateral displacement, time of arrival, and speed)
         output: single frenet path
+        df: final lateral position
+        Tf: length of time reaching final position
+        Vf: speed
+        
+        Note, the lateral velocity and acceleration on final is view as 0,
+              the longitudinal speed on initial and final is view as zero
+        
         """
         s, s_d, s_dd, d, d_d, d_dd = f_state
 
@@ -405,6 +422,8 @@ class FrenetPlanner:
                     tfp.cd = self.KJ * Jp + self.KT * Ti + self.KD * (tfp.d[-1] - target_d) ** 2
                     tfp.cv = self.KJ * Js + self.KT * Ti + self.KD * ds
                     tfp.cf = self.KLAT * tfp.cd + self.KLON * tfp.cv
+                    
+                    tfp.final_frenet_state=[tfp.s[-1],tfp.s_d[-1],tfp.s_dd[-1],tfp.d[-1],tfp.d_d[-1],tfp.d_dd[-1]]
 
                     frenet_paths.append(tfp)
         return frenet_paths
@@ -508,15 +527,89 @@ class FrenetPlanner:
     def frenet_optimal_planning(self, f_state, change_lane=0, target_speed=30 / 3.6):
         """
         input: current frenet state and actions
+            - f_state: frenet state of type [s, s_d, s_dd, d, d_d, d_dd]
         output: candidate frenet paths and index of the optimal path
         process:
                 - generate candidate frenet paths
                 - calculate the inertial (global) trajectories
                 - remove infeasible paths (those who make collisions)
                 - find the optimal path based on cost values
+                
         """
 
         fplist = self.calc_frenet_paths(f_state, change_lane=change_lane, target_speed=target_speed)
+        fplist = self.calc_global_paths(fplist)
+        fplist = self.calc_curvature_paths(fplist)
+        fplist = self.check_paths(fplist)
+
+        # find minimum cost path
+        mincost = float("inf")
+        bestpath_idx = None
+        for i, fp in enumerate(fplist):
+            if mincost >= fp.cf:
+                mincost = fp.cf
+                bestpath_idx = i
+
+        return bestpath_idx, fplist
+    
+
+        
+    
+    def frenet_optimal_planning_twice(self, f_state, change_lane=0, target_speed=30 / 3.6):
+        """
+        Do above planning twice
+        """
+
+        def concate_two_path(fp1,fp2,target_speed):
+            """
+            Concate two path into fp1. fp2 is the path after fp.
+            return fp
+            """
+            fp = copy.deepcopy(fp1)
+            t_final = fp.t[-1]
+            t_to_concate = [i+t_final for i in fp2.t]
+            Ti = t_to_concate[-1]
+            fp.t += t_to_concate[1:]#the first t in fp2 is 0.0, so start from the second
+            fp.d += fp2.d[1:]
+            fp.d_d += fp2.d_d[1:]
+            fp.d_dd += fp2.d_dd[1:]
+            fp.d_ddd += fp2.d_ddd[1:]
+            fp.s += fp2.s[1:]
+            fp.s_d += fp2.s_d[1:]
+            fp.s_dd += fp2.s_dd[1:]
+            fp.s_ddd += fp2.s_ddd[1:]
+            fp.path_id = np.NaN#NotImplemented
+            
+            """Now copy and past"""
+            Jp = sum(np.power(fp.d_ddd, 2))  # square of jerk
+            Js = sum(np.power(fp.s_ddd, 2))  # square of jerk
+    
+            # square of diff from target speed
+            ds = (target_speed - fp.s_d[-1]) ** 2
+            
+            fp.cd = self.KJ * Jp + self.KT * Ti + 0#???????????????????????/
+    #        fp.cd = self.KJ * Jp + self.KT * Ti + self.KD * (fp.d[-1] - target_d) ** 2
+            fp.cv = self.KJ * Js + self.KT * Ti + self.KD * ds
+            fp.cf = self.KLAT * fp.cd + self.KLON * fp.cv
+            fp.final_frenet_state=fp2.final_frenet_state
+            
+            return fp
+
+
+        fplist = self.calc_frenet_paths(f_state, change_lane=change_lane, target_speed=target_speed)
+        
+        """now start the mod"""
+        fplist_concate = []
+        for i in fplist:
+            fp_list2_1 = self.calc_frenet_paths(i.final_frenet_state, change_lane=-1, target_speed=target_speed)
+            fp_list2_2 = self.calc_frenet_paths(i.final_frenet_state, change_lane=1, target_speed=target_speed)
+#            fp_list2_3 = self.calc_frenet_paths(i.final_frenet_state, change_lane=0, target_speed=target_speed)
+            fp_list2 = [] + fp_list2_1 + fp_list2_2
+            for j in fp_list2:
+                fplist_concate.append( concate_two_path(i,j,target_speed) )
+        fplist = fplist_concate
+        """end"""
+        
         fplist = self.calc_global_paths(fplist)
         fplist = self.calc_curvature_paths(fplist)
         fplist = self.check_paths(fplist)
@@ -566,6 +659,29 @@ class FrenetPlanner:
         self.path = fplist[best_path_idx]
         # print('trajectory planning time: {} s'.format(time.time() - t0))
         return self.path, fplist
+    
+    def run_step_without_update_self_path(self, ego_state, idx, change_lane=0, target_speed=30 / 3.6):
+        """
+        as can be seen, one line of code is commented
+        """
+        self.steps += 1
+        # t0 = time.time()
+
+        f_state = self.estimate_frenet_state(ego_state, idx)
+
+        # Frenet motion planning
+#        best_path_idx, fplist = self.frenet_optimal_planning_twice(f_state, change_lane=change_lane,
+#                                                             target_speed=target_speed)
+        best_path_idx, fplist = self.frenet_optimal_planning(f_state, change_lane=change_lane,
+                                                             target_speed=target_speed)        
+#        self.path = fplist[best_path_idx]
+        # print('trajectory planning time: {} s'.format(time.time() - t0))
+        return fplist[best_path_idx], fplist
+    
+    def update_self_path(self,path):
+        #see the commented code in 'run_step_without_update_self_path'
+        self.path = path
+
 
     def run_step_single_path(self, ego_state, idx, df_n=0, Tf=4, Vf_n=0):
         """
@@ -602,3 +718,38 @@ class FrenetPlanner:
         self.path = self.generate_single_frenet_path(f_state, df=df, Tf=Tf, Vf=Vf)
 
         return self.path, lanechange, off_the_road
+
+
+    def run_step_single_path_without_update_self_path(self, ego_state, idx, df_n=0, Tf=4, Vf_n=0):
+        """
+        Same as above, but does not update self.path.
+        """
+        self.steps += 1
+
+        # estimate frenet state
+        f_state = self.estimate_frenet_state(ego_state, idx)
+        # convert lateral action value from range (-1, 1) to the desired value in [-3.5, 0.0, 3.0, 7.0]
+        if df_n < -0.33:
+            df = -1
+        elif df_n > 0.33:
+            df = 1
+        else:
+            df = 0
+
+        d = self.path.d[idx]  # CHANGE THIS! when f_state estimation works fine. (self.path.d[idx])(d = f_state[3])
+        _df = np.clip(df * self.LANE_WIDTH + d, -2 * self.LANE_WIDTH, 3 * self.LANE_WIDTH).item()
+        df = closest([self.LANE_WIDTH * lane_n for lane_n in range(-1, 3)], _df)
+        # df = np.round(df_n[0]) * self.LANE_WIDTH + d  # allows agent to drive off the road
+
+        # lanechange should be set true if there is a lane change
+        lanechange = True if abs(df - d) >= 3 else False
+
+        # off-the-road attempt is recorded
+        off_the_road = True if _df < -4 or _df > 7.5 else False
+
+        Vf = self.speed_radius * Vf_n + self.speed_center
+
+        # Frenet motion planning
+        path = self.generate_single_frenet_path(f_state, df=df, Tf=Tf, Vf=Vf)
+
+        return path, lanechange, off_the_road
