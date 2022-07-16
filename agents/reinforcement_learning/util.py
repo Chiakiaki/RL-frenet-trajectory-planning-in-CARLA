@@ -21,6 +21,9 @@ def Process_batch_for_BDP(rollout):
     Copy past from replaybuffer implementation
     """
     obs_batch, states, rewards, masks, actions, values, ep_infos, true_reward,a_label,prob,all_a, num_a_batch = rollout
+    
+    a_label = np.squeeze(a_label)#should be 1-D
+
 
     tmp3 = [np.ones([1,i]) for i in num_a_batch]
     grouping2 = sc.linalg.block_diag(*tmp3)

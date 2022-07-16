@@ -16,6 +16,61 @@ git remote add origin https://github.com/Chiakiaki/RL-frenet-trajectory-planning
 
 git add ./*.py
 git add ./*.yaml
+git add ./*.sh
+
+# =======================================================================================
+# re-deploy on csf3
+# =======================================================================================
+curl -O https://carla-releases.s3.eu-west-3.amazonaws.com/Linux/CARLA_0.9.9.2.tar.gz
+mkdir ./CARLA_0.9.9.2
+tar -xf CARLA_0.9.9.2.tar.gz -C CARLA_0.9.9.2
+
+git clone https://github.com/Chiakiaki/RL-frenet-trajectory-planning-in-CARLA.git
+
+module load compilers/gcc/8.2.0
+
+module load apps/binapps/anaconda3/2019.07
+module load libs/cuda/10.1.243
+module load libs/gcc/glx/1.5 libs/gcc/glew/2.1.0 libs/gcc/glm/0.9.9.4 libs/gcc/glog/0.4.0
+module load mpi/gcc/openmpi/4.1.0
+qrsh -l v100=1 -pe smp.pe 8 bash
+
+
+
+#conda create --prefix ~/tensorflow115/ python=3.7
+#conda init bash
+bash
+conda activate ~/tensorflow115
+conda install tensorflow=1.15
+pip install --upgrade pip
+cd RL-frenet-trajectory-planning-in-CARLA/
+pip install "gym==0.19.0"
+pip install gitpython opencv-python easydict
+export PATH=$PATH:/opt/apps/mpi/gcc/openmpi/4.0.1-numa-ucx-1.6.0--gcc-8.2.0/bin
+pip install mpi4py pyyaml
+
+conda install libpng
+
+
+
+
+cd agents/reinforcement_learning
+pip install -e .
+
+# ===================================================================
+# csf3 on run
+# ===================================================================
+qrsh -l v100=1 -pe smp.pe 8 bash
+scp -r ~/RL-frenet-trajectory-planning-in-CARLA/bash_.sh ~/RL-frenet-trajectory-planning-in-CARLA/bash_bdp.sh p28367rs@csf3.itservices.manchester.ac.uk:~/scratch/
+rm bash_*.e*
+rm bash_*.o*
+rm -rf ~/RL-frenet-trajectory-planning-in-CARLA/logs/agent_111
+rm -rf ~/RL-frenet-trajectory-planning-in-CARLA/logs/agent_1111
+qsub ~/scratch/bash_.sh
+
+# collecting result ===================================================================
+scp -r p28367rs@csf3.itservices.manchester.ac.uk:~/RL-frenet-trajectory-planning-in-CARLA/logs/agent_1111 ~/RL-frenet-trajectory-planning-in-CARLA/logs/agent_21111_csf3
+scp -r p28367rs@csf3.itservices.manchester.ac.uk:~/RL-frenet-trajectory-planning-in-CARLA/logs/agent_111 ~/RL-frenet-trajectory-planning-in-CARLA/logs/agent_2111_csf3
 
 #on run====================================================================
 ~/CARLA_0.9.9.2/CarlaUE4.sh -carla-server -fps=20 -world-port=2000 -windowed -ResX=1280 -ResY=720 -carla-no-hud -quality-level=Low
@@ -36,6 +91,8 @@ train args:
 python3 monitor_plot.py --agent_ids 111 --window_size 10 --colors red --lr a2c --alpha 0.1 --n_steps 1e7
 python3 monitor_plot.py --agent_ids 1111 --window_size 10 --colors red --lr bdp --alpha 0.1 --n_steps 1e7
 python3 monitor_plot.py --agent_ids 111 1111 --window_size 10 --colors red blue --lr a2c bdp --alpha 0.1 --n_steps 1e7
+python3 monitor_plot.py --agent_ids 201111 301111 20111 --window_size 10 --colors red blue green --lr bdp bdp a2c2 --alpha 0.1 --n_steps 1e7
+
 
 python3 run.py --cfg_file=tools/cfgs/config.yaml --agent_id=1 --env=CarlaGymEnv-v1 
 python3 run.py --cfg_file=tools/cfgs/config_a2c.yaml --agent_id=111 --env=CarlaGymEnv-v1  --play_mode=1

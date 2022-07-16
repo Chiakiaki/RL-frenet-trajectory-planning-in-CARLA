@@ -51,7 +51,7 @@ def parse_args_cfgs():
     parser.add_argument('-p', '--carla_port', metavar='P', default=2000, type=int, help='TCP port to listen to (default: 2000)')
     parser.add_argument('--tm_port', default=8000, type=int, help='Traffic Manager TCP port to listen to (default: 8000)')
     parser.add_argument('--carla_res', metavar='WIDTHxHEIGHT', default='1280x720', help='window resolution (default: 1280x720)')
-    parser.add_argument('--learning_rate', metavar='lr', default='7e-4', help='learning_rate (default: 7e-4)')
+    parser.add_argument('--learning_rate', metavar='lr', default='7e-4', help='learning rate (default: 7e-4)')
 
 
     args = parser.parse_args()
@@ -135,15 +135,16 @@ if __name__ == '__main__':
 
             param_noise = AdaptiveParamNoiseSpec(initial_stddev=float(cfg.POLICY.PARAM_NOISE_STD),
                                                  desired_action_stddev=float(cfg.POLICY.PARAM_NOISE_STD))
-            model = DDPG(policy[cfg.POLICY.NET], env, verbose=1, param_noise=param_noise, action_noise=action_noise, learning_rate = args.learning_rate, policy_kwargs={'cnn_extractor': eval(cfg.POLICY.CNN_EXTRACTOR)})
+            model = DDPG(policy[cfg.POLICY.NET], env, verbose=1, param_noise=param_noise, action_noise=action_noise,
+                         policy_kwargs={'cnn_extractor': eval(cfg.POLICY.CNN_EXTRACTOR)})
         elif cfg.POLICY.NAME == 'PPO2':
-            model = PPO2(policy[cfg.POLICY.NET], env, verbose=1, learning_rate = args.learning_rate, model_dir=save_path,tensorboard_log=save_path, policy_kwargs={'cnn_extractor': eval(cfg.POLICY.CNN_EXTRACTOR)})
+            model = PPO2(policy[cfg.POLICY.NET], env, verbose=1, model_dir=save_path,tensorboard_log=save_path, policy_kwargs={'cnn_extractor': eval(cfg.POLICY.CNN_EXTRACTOR)})
         elif cfg.POLICY.NAME == 'TRPO':
-            model = TRPO(policy[cfg.POLICY.NET], env, verbose=1, learning_rate = args.learning_rate, model_dir=save_path,tensorboard_log=save_path, policy_kwargs={'cnn_extractor': eval(cfg.POLICY.CNN_EXTRACTOR)})
+            model = TRPO(policy[cfg.POLICY.NET], env, verbose=1, model_dir=save_path,tensorboard_log=save_path, policy_kwargs={'cnn_extractor': eval(cfg.POLICY.CNN_EXTRACTOR)})
         elif cfg.POLICY.NAME =='A2C':
-            model = A2C(policy[cfg.POLICY.NET], env, verbose=1, learning_rate = args.learning_rate, model_dir=save_path,tensorboard_log=save_path, policy_kwargs={'cnn_extractor': eval(cfg.POLICY.CNN_EXTRACTOR)})
+            model = A2C(policy[cfg.POLICY.NET], env, verbose=1, model_dir=save_path,tensorboard_log=save_path, policy_kwargs={'cnn_extractor': eval(cfg.POLICY.CNN_EXTRACTOR)})
         elif cfg.POLICY.NAME == 'BDP':
-            model = BDPL(policy[cfg.POLICY.NET], env, verbose = 1, learning_rate = args.learning_rate, model_dir=save_path,tensorboard_log=save_path, policy_kwargs={'feature_extraction': 'mlp','cnn_extractor': eval(cfg.POLICY.CNN_EXTRACTOR)})
+            model = BDPL(policy[cfg.POLICY.NET], env, verbose = 1, learning_rate = 5e-1, model_dir=save_path,tensorboard_log=save_path, policy_kwargs={'feature_extraction': 'mlp','cnn_extractor': eval(cfg.POLICY.CNN_EXTRACTOR)})
         else:
             print(cfg.POLICY.NAME)
             raise Exception('Algorithm name is not defined!')

@@ -1,3 +1,4 @@
 logs/
 agents/reinforcement_learning/stable_baselines
 agents/reinforcement_learning/stable_baselines.egg-info/
+*.pyc
