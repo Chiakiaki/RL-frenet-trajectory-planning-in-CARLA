@@ -380,7 +380,7 @@ class BDPL(ActorCriticRLModel):
     """
 
     def __init__(self, policy, env, gamma=0.99, n_steps=5, vf_coef=0.25, ent_coef=0.01, max_grad_norm=0.5,
-                 learning_rate=7e-4, alpha=0.99, epsilon=1e-5, lr_schedule='constant', verbose=0,
+                 learning_rate=7e-4, alpha=0.99, epsilon=1e-5, lr_schedule='constant', verbose=0, pg_lr_multiplyier=1,
                  tensorboard_log=None, _init_setup_model=True, policy_kwargs=None,
                  full_tensorboard_log=False, seed=None, n_cpu_tf_sess=None, model_dir=None):
 
@@ -414,7 +414,7 @@ class BDPL(ActorCriticRLModel):
         self.initial_state = None
         self.learning_rate_schedule = None
         self.summary = None
-        
+        self.pg_lr_multiplyier = pg_lr_multiplyier
 
         super(BDPL, self).__init__(policy=policy, env=env, verbose=verbose, requires_vec_env=True,
                                   _init_setup_model=_init_setup_model, policy_kwargs=policy_kwargs,
@@ -486,7 +486,7 @@ class BDPL(ActorCriticRLModel):
                     self.debug_info = self.gt_placeholder_n - prob_n2
                     
                     self.vf_loss = mse(tf.squeeze(train_model.value_flat), self.rewards_ph)
-                    loss = self.pg_loss + self.vf_loss
+                    loss = self.pg_loss * self.pg_lr_multiplyier + self.vf_loss
 
 #                    tf.summary.scalar('entropy_loss', self.entropy)
                     tf.summary.scalar('policy_gradient_loss', self.pg_loss)
