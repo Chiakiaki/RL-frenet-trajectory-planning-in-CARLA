@@ -52,7 +52,7 @@ def parse_args_cfgs():
     parser.add_argument('--tm_port', default=8000, type=int, help='Traffic Manager TCP port to listen to (default: 8000)')
     parser.add_argument('--carla_res', metavar='WIDTHxHEIGHT', default='1280x720', help='window resolution (default: 1280x720)')
     parser.add_argument('--learning_rate', type=float, metavar='lr', default='7e-4', help='learning_rate (default: 7e-4)')
-
+    parser.add_argument('--planner_mode', type=str, default='bdp', help='specify the mode of planner, can be bdp,. (default: bdp)')
 
     args = parser.parse_args()
 
@@ -77,7 +77,7 @@ def parse_args_cfgs():
 if __name__ == '__main__':
     args, cfg = parse_args_cfgs()
     print('Env is starting')
-    env = gym.make(args.env)
+    env = gym.make(args.env,mode = args.planner_mode)
     if args.play_mode:
         env.enable_auto_render()
     env.begin_modules(args)

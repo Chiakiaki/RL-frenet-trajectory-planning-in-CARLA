@@ -64,15 +64,14 @@ qrsh -l v100=1 -pe smp.pe 8 bash
 scp -r ~/RL-frenet-trajectory-planning-in-CARLA/bash_.sh ~/RL-frenet-trajectory-planning-in-CARLA/bash_bdp.sh p28367rs@csf3.itservices.manchester.ac.uk:~/scratch/
 rm bash_*.e*
 rm bash_*.o*
-rm -rf ~/RL-frenet-trajectory-planning-in-CARLA/logs/agent_111
-rm -rf ~/RL-frenet-trajectory-planning-in-CARLA/logs/agent_1111
+rm -rf ~/RL-frenet-trajectory-planning-in-CARLA/logs/*
 qsub ~/scratch/bash_.sh
 qsub ~/RL-frenet-trajectory-planning-in-CARLA/bash_bdp_7e3.sh
 qsub ~/RL-frenet-trajectory-planning-in-CARLA/bash_bdp_original.sh
 
 # collecting result ===================================================================
 scp -r p28367rs@csf3.itservices.manchester.ac.uk:~/RL-frenet-trajectory-planning-in-CARLA/logs/agent_1111 ~/RL-frenet-trajectory-planning-in-CARLA/logs/agent_21111_csf3
-scp -r p28367rs@csf3.itservices.manchester.ac.uk:~/RL-frenet-trajectory-planning-in-CARLA/logs/agent_111 ~/RL-frenet-trajectory-planning-in-CARLA/logs/agent_2111_csf3
+scp -r p28367rs@csf3.itservices.manchester.ac.uk:~/RL-frenet-trajectory-planning-in-CARLA/logs/agent_11110 ~/RL-frenet-trajectory-planning-in-CARLA/logs/agent_211110_csf3
 
 #on run====================================================================
 ~/CARLA_0.9.9.2/CarlaUE4.sh -carla-server -fps=20 -world-port=2000 -windowed -ResX=1280 -ResY=720 -carla-no-hud -quality-level=Low
@@ -94,6 +93,7 @@ python3 monitor_plot.py --agent_ids 111 --window_size 10 --colors red --lr a2c -
 python3 monitor_plot.py --agent_ids 1111 --window_size 10 --colors red --lr bdp --alpha 0.1 --n_steps 1e7
 python3 monitor_plot.py --agent_ids 111 1111 --window_size 10 --colors red blue --lr a2c bdp --alpha 0.1 --n_steps 1e7
 python3 monitor_plot.py --agent_ids 201111 301111 20111 --window_size 10 --colors red blue green --lr bdp bdp a2c2 --alpha 0.1 --n_steps 1e7
+python3 monitor_plot.py --agent_ids 21111 211110 20111 --window_size 100 --colors red blue green --lr bdp bdp7e3 a2c --alpha 0.1 --n_steps 1e8
 
 
 python3 run.py --cfg_file=tools/cfgs/config.yaml --agent_id=1 --env=CarlaGymEnv-v1 
