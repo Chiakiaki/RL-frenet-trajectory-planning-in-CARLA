@@ -1,7 +1,7 @@
 #!/bin/bash --login
 #$ -cwd
 #$ -l v100=1         # A 4-GPU request (v100 is just a shorter name for nvidia_v100)
-#$ -pe smp.pe 16     # Let's use the 8 CPUs per GPU (32 cores in total)
+#$ -pe smp.pe 8     # Let's use the 8 CPUs per GPU (32 cores in total)
 
 # CSF3 configuration part ===========
 module load compilers/gcc/8.2.0

@@ -19,3 +19,7 @@ register(
 register(
     id='CarlaGymEnv-v5',
     entry_point='carla_gym.envs:CarlaGymEnv_v1_generic')
+    
+register(
+    id='CarlaGymEnv-v6',
+    entry_point='carla_gym.envs:CarlaGymEnv_v2_continuous')

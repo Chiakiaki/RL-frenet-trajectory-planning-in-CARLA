@@ -101,7 +101,9 @@ python3 monitor_plot.py --agent_ids 201111 301111 20111 --window_size 10 --color
 python3 monitor_plot.py --agent_ids 21111 211110 20111 --window_size 100 --colors red blue green --lr bdp bdp7e3 a2c --alpha 0.1 --n_steps 1e8
 
 
-python3 monitor_plot.py --agent_ids 21111 211110 20111 211120 211130 --window_size 100 --colors red blue green orange yellow --lr bdp bdp7e3 a2c bdp_maneuver bdp_maneuver7e3 --alpha 0.1 --n_steps 1e8
+python3 monitor_plot.py --agent_ids 21111 211110 20111 211120 211130 44440 --window_size 100 --colors red blue green orange yellow --lr bdp bdp7e3 a2c bdp_maneuver bdp_maneuver7e3 ddpg_on_params --alpha 0.1 --n_steps 1e8
+
+python3 monitor_plot.py --agent_ids 21111 211110 20111 211130 44440 --window_size 100 --colors red blue green orange yellow --lr bdp bdp7e3 a2c bdp_maneuver7e3 ddpg_on_params --alpha 0.1 --n_steps 1e8
 
 
 python3 run.py --cfg_file=tools/cfgs/config.yaml --agent_id=1 --env=CarlaGymEnv-v1 
