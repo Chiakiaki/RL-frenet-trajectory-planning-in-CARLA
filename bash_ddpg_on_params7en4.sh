@@ -1,7 +1,7 @@
 #!/bin/bash --login
 #$ -cwd
 #$ -l v100=1         # A 4-GPU request (v100 is just a shorter name for nvidia_v100)
-#$ -pe smp.pe 8     # Let's use the 8 CPUs per GPU (32 cores in total)
+#$ -pe smp.pe 16     # Let's use the 8 CPUs per GPU (32 cores in total)
 
 # CSF3 configuration part ===========
 module load compilers/gcc/8.2.0
@@ -14,6 +14,7 @@ export TF_XLA_FLAGS=--tf_xla_cpu_global_jit
 export CARLA_ROOT=~/CARLA_0.9.9.2/
 export PYTHONPATH="${CARLA_ROOT}/PythonAPI/carla/dist/carla-0.9.9-py3.7-linux-x86_64.egg":${PYTHONPATH}
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:~/libjpeg/jpeg-8d1/lib
+export OMP_NUM_THREADS=16
 # ===================================
 
 # portRange="80-81"
