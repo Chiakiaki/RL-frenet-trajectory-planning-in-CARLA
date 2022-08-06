@@ -775,6 +775,7 @@ class BDPLRunner(AbstractEnvRunner):
             # for BDP
             # the env is always wrapped as vecEnv, so we refer to our defined function with env.envs[0]
             ac_candidates,n_ac_candidates = self.env.envs[0].external_sampler()#ac_candidates:(n,d)
+            assert len(np.shape(ac_candidates)) == 2, "ac_candidates' dims should be 2"
             actions_idx, values, states, prob_n = self.model.step(self.obs, ac_candidates, self.states, self.dones)# note: action_idx is of shape (1,1),not scalar
             # actions_idx:(1,1),
             actions_idx = actions_idx[0]#now (1,)

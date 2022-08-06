@@ -515,7 +515,7 @@ class CarlaGymEnv(gym.Env):
             # must match action space
             # the shape of the ac_candidates is determined by 'Tf' parameter.
             # TODO
-            ac_candidates = [traj2action(tmp_path,T_ac_candidates,self.dt) for tmp_path in path_list]
+            ac_candidates = [traj2action(tmp_path,T_ac_candidates,self.dt)[0] for tmp_path in path_list]
             return np.array(ac_candidates)
         
 

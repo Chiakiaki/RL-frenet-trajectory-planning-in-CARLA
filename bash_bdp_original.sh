@@ -77,7 +77,7 @@ done
 
 # ===================================
 cd ~/RL-frenet-trajectory-planning-in-CARLA/
-python3 ./run_BDPL.py -p $port --tm_port $port_tm --cfg_file=tools/cfgs/config_bdp.yaml --agent_id=1111 --env=CarlaGymEnv-v4
+python3 ./run_BDPL.py -p $port --tm_port $port_tm --cfg_file=tools/cfgs/config_bdp.yaml --agent_id=1111 --env=CarlaGymEnv-v5
 
 
 #now close the server pid

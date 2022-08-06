@@ -13,7 +13,7 @@ from agents.low_level_controller.controller import VehiclePIDController
 from agents.tools.misc import get_speed
 from agents.low_level_controller.controller import IntelligentDriverModel
 
-from .utils import traj2action
+from .utils import traj2action,action2traj,get_traj_x0,traj_action_params,traj_distance_l2,traj2action_no_start_yaw
 
 MODULE_WORLD = 'WORLD'
 MODULE_HUD = 'HUD'
@@ -126,15 +126,21 @@ class CarlaGymEnv(gym.Env):
         
         self.T_ac_candidates = int(cfg.T_ACTION_CANDIDATES / cfg.CARLA.DT)#cfg.T_ACTION_CANDIDATES: length of trajectories used for action(secondes), must be less than 4.9
         
-        if self.mode == 'bdp':
+        if self.mode == 'bdp' or self.mode == 'ddpg':
             """Changes for BDPL: action space is ac_candidates's space"""
-            action_low = np.array([-999.]*(self.T_ac_candidates*2))#-1 because we use 'yaw_change' for action feature 
-            action_high = np.array([999.]*(self.T_ac_candidates*2))
+            """ddpg use same action space with bdp"""
+            action_low = np.array([-1.]*(self.T_ac_candidates*2))#-1 because we use 'yaw_change' for action feature 
+            action_high = np.array([1.]*(self.T_ac_candidates*2))
             self.action_space = gym.spaces.Box(low = action_low, high=action_high, shape=([self.T_ac_candidates*2]), dtype=np.float32)
         elif self.mode == 'continuous_catagorical':
             """original action space of env_v1"""
             action_low = np.array([-1])
             action_high = np.array([1])
+            self.action_space = gym.spaces.Box(low=action_low, high=action_high, dtype=np.float32)
+        elif self.mode == 'ddpg_on_params':
+            """ddpg while action space is frenet params df and vf"""
+            action_low = np.array([-1.,-1.])
+            action_high = np.array([1.,1.])
             self.action_space = gym.spaces.Box(low=action_low, high=action_high, dtype=np.float32)
 
         # [cn, ..., c1, c0, normalized yaw angle, normalized speed error] => ci: coefficients
@@ -464,7 +470,7 @@ class CarlaGymEnv(gym.Env):
         So, 'external_sampler()' and 'step()' need to be called in turn. (Firstly this one, then 'step())
         """
         self.n_step += 1
-
+        #TODO: is first path not treated
         self.actor_enumerated_dict['EGO'] = {'NORM_S': [], 'NORM_D': [], 'S': [], 'D': [], 'SPEED': []}
         if self.verbosity: print('ACTION'.ljust(15), '{:+8.6f}'.format(float(action)))
         if self.is_first_path:  # Episode start is bypassed
@@ -495,55 +501,75 @@ class CarlaGymEnv(gym.Env):
         #TODO: set off the road
         off_the_road = False
         """
+        def cal_path_list_with_off_road(self,ego_state):
+            bdpl_path_list = []
+            path1, lanechange1, off_the_road1 = self.motionPlanner.run_step_single_path_without_update_self_path_with_off_road(ego_state, self.f_idx, df_n=0, Tf=5,
+                                                                             Vf_n=-1)#original code    
+            path2, lanechange2, off_the_road2 = self.motionPlanner.run_step_single_path_without_update_self_path_with_off_road(ego_state, self.f_idx, df_n=-1, Tf=5,
+                                                                             Vf_n=-1)#original code
+            path3, lanechange3, off_the_road3 = self.motionPlanner.run_step_single_path_without_update_self_path_with_off_road(ego_state, self.f_idx, df_n=1, Tf=5,
+                                                                             Vf_n=-1)#original code
+            bdpl_path_list = [path1,path2,path3]
+            return bdpl_path_list
+        
+        
+        
         self.bdpl_path_list = []
         path1, lanechange1, off_the_road1 = self.motionPlanner.run_step_single_path_without_update_self_path(ego_state, self.f_idx, df_n=0, Tf=5,
-                                                                         Vf_n=-1)#original code        
+                                                                         Vf_n=-1)#original code    
         path2, lanechange2, off_the_road2 = self.motionPlanner.run_step_single_path_without_update_self_path(ego_state, self.f_idx, df_n=-1, Tf=5,
-                                                                         Vf_n=-1)#original code    
+                                                                         Vf_n=-1)#original code
         path3, lanechange3, off_the_road3 = self.motionPlanner.run_step_single_path_without_update_self_path(ego_state, self.f_idx, df_n=1, Tf=5,
-                                                                         Vf_n=-1)#original code    
+                                                                         Vf_n=-1)#original code
         self.bdpl_path_list = [path1,path2,path3]
         self.tmp_lanechange = [lanechange1,lanechange2,lanechange3]
         self.tmp_off_the_road = [off_the_road1,off_the_road2,off_the_road3]
         
-        self.bdpl_path_list
+        self.bdpl_path_list_with_offroad = cal_path_list_with_off_road(self,ego_state)
         
         
         #save some parames
                 #some variable defined in external_sampler
-        self.external_sampler_variable = temp,init_speed
+        traj_action_params1 = traj_action_params(psi,self.T_ac_candidates,dt = self.dt)
+        self.external_sampler_variable = temp,init_speed,traj_action_params1,ego_state
 
         # convert path in bdpl_path_list to vector
         
         #note, the path.x and path.y are the only information in global coordinates
-        #the path.yaw is the yaw of s-axis of the frenet coordinate, so they are the same
+        #the path.yaw is the yaw of s-axis of the frenet coordinate (the global path), so they are the same
         #path.s,path.s_d,path.s_dd are also the same because they are of frenet coordinate
-#        def process_path_list_as_acs(path_list,T_ac_candidates,current_yaw,yaw_scale = 1,speed_scale = 1):
-#            # must match action space
-#            # the shape of the ac_candidates is determined by 'Tf' parameter.
-#            ac_candidates = [np.concatenate([(np.array(tmp_path.yaw)[1:T_ac_candidates+1] - np.array(tmp_path.yaw)[0:T_ac_candidates] )*yaw_scale, np.array(tmp_path.s_dd)[:T_ac_candidates]*speed_scale]) for tmp_path in path_list]
-#            return np.array(ac_candidates)
 
-        def process_path_list_as_acs(path_list,T_ac_candidates,yaw_scale = 1,speed_scale = 1):
-            # must match action space
-            # the shape of the ac_candidates is determined by 'Tf' parameter.
-            # TODO
-            ac_candidates = [traj2action(tmp_path,T_ac_candidates,self.dt) for tmp_path in path_list]
+
+        def process_path_list_as_acs(path_list,traj_action_params):
+            #note: when on vehicle start from stationary, the frenet trajectory for left lane-change and right
+            #       lane change has sharp turning rate at start. So we neglect the first yaw_change value
+            ac_candidates= [traj2action_no_start_yaw(tmp_path,traj_action_params)[0] for tmp_path in path_list]
             return np.array(ac_candidates)
+        
         
 
         if self.mode == 'bdp':
-            return process_path_list_as_acs(self.bdpl_path_list,self.T_ac_candidates),len(self.bdpl_path_list)
+            #tmp_debug
+            #note: when on vehicle start from stationary, the frenet trajectory for left lane-change and right
+            #       lane change has sharp turning rate at start.
+#            ac1 = process_path_list_as_acs(self.bdpl_path_list,traj_action_params1)
+            ac2 = process_path_list_as_acs(self.bdpl_path_list_with_offroad,traj_action_params1)
+#            if np.max(np.abs(ac2[:,0])) > 1:
+#                print('e')
+            
+            return ac2,len(self.bdpl_path_list)
         elif self.mode == 'continuous_catagorical':
             return np.array([[0.],[-1.],[1.]]),3#must be correctly set, is related to lane-change reward
+
+
         
     def step(self, action=None):
         #for dev
         if self.bdpl_path_list is None:
-            # so external_sampler not called
-            # to be compatible with original:
+            # so external_sampler not called, call it now
+            # to be compatible with original.
             self.external_sampler()
-        temp,init_speed = self.external_sampler_variable
+        temp,init_speed,traj_action_params1,ego_state = self.external_sampler_variable
         """
         Though action space is box, here the action passed in should be int, because,
         in Boltzmann Distribution Policy Learning, the env.step need not return all infomation to candidate actions,
@@ -552,8 +578,39 @@ class CarlaGymEnv(gym.Env):
         if self.mode == 'catagorical' or self.mode == 'bdp':
             assert type(action) is int or np.int32 or np.int64, "error action %d is not type int" % action
             fpath = self.bdpl_path_list[action]
+            self.lanechange = self.tmp_lanechange[action]
+            off_the_road = self.tmp_off_the_road[action]
+            
+            """
+            #tmp_test_for_reconstruct_action
+            tmp_ac = traj2action(fpath,traj_action_params1)
+            x0,y0 = get_traj_x0(self.bdpl_path_list[0])#get the x0,y0
+            fpath_reconstruct = action2traj(tmp_ac,x0,y0,traj_action_params1)
+            dis = traj_distance_l2(fpath,fpath_reconstruct)
+            assert dis < 0.001
+            """
+        elif self.mode == 'ddpg_on_params':
+            #simply calculate one with action
+            fpath, self.lanechange, off_the_road = self.motionPlanner.run_step_single_path_without_update_self_path_continous_df(ego_state, self.f_idx, df_n=action[0]*1.5, Tf=5, Vf_n=action[1] -1)
+
+
+
+            #TODO: change  Vf_n, remove the '-1'
         elif self.mode == 'ddpg':
-            fpath = action
+            #action is of the same shape with
+            x0,y0 = get_traj_x0(self.bdpl_path_list[0])#get the x0,y0
+            fpath = action2traj(action,traj_action_params1)
+            raise NotImplementedError#fpath does not have frenet state
+            
+            #an action of time length 1 will yield a trajector with lenth 2.
+            assert fpath.t == 5./self.dt
+            
+            #now judge whether it is lane_change
+            dis = [traj_distance_l2(fpath,path2) for path2 in self.bdpl_path_list_with_offroad]
+            nearest_idx = np.argmin(dis)
+            self.lanechange = self.tmp_lanechange[nearest_idx]
+            off_the_road = self.tmp_off_the_road[nearest_idx]
+            
         elif self.mode == 'continuous_catagorical':
             assert type(action) is np.float32 or np.float64, "error action %d is not type float" % action
             #this code is previously inside motion planner, we move it here for equivalent
@@ -564,11 +621,11 @@ class CarlaGymEnv(gym.Env):
             else:
                 action = 0
             fpath = self.bdpl_path_list[action]
+            self.lanechange = self.tmp_lanechange[action]
+            off_the_road = self.tmp_off_the_road[action]
         else:
             raise NotImplementedError
-        self.bdpl_path_list = []#erase
-        self.lanechange = self.tmp_lanechange[action]
-        off_the_road = self.tmp_off_the_road[action]
+        self.bdpl_path_list = None#erase
         self.motionPlanner.update_self_path(fpath)
         
         
