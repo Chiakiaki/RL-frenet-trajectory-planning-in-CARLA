@@ -14,7 +14,7 @@ export TF_XLA_FLAGS=--tf_xla_cpu_global_jit
 export CARLA_ROOT=~/CARLA_0.9.9.2/
 export PYTHONPATH="${CARLA_ROOT}/PythonAPI/carla/dist/carla-0.9.9-py3.7-linux-x86_64.egg":${PYTHONPATH}
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:~/libjpeg/jpeg-8d1/lib
-#export OMP_NUM_THREADS=16
+export OMP_NUM_THREADS=16
 # ===================================
 
 # portRange="80-81"
