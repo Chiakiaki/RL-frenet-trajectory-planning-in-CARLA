@@ -57,7 +57,7 @@ def closest_wp_idx(ego_state, fpath, f_idx, w_size=10):
 
 class CarlaGymEnv(gym.Env):
     # metadata = {'render.modes': ['human']}
-    def __init__(self):
+    def __init__(self,**kwargs):
         self.__version__ = "9.9.2"
 
         # simulation
