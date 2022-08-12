@@ -42,3 +42,6 @@ TRAFFIC_MANAGER:
   N_SPAWN_CARS: 15                                              # number of cars spawned at each episode
   MIN_SPEED: 8.33                                               # Min speed for actors in random traffic
   MAX_SPEED: 11.11                                              # Max speed for actors in random traffic
+
+
+T_ACTION_CANDIDATES: 4                                              # length of trajectories used for action(secondes), must be less than 5
