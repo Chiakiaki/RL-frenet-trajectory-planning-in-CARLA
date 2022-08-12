@@ -1,4 +1,5 @@
 
+
 git clone https://github.com/MajidMoghadam2006/RL-frenet-trajectory-planning-in-CARLA.git
 cd RL-frenet-trajectory-planning-in-CARLA/
 #delete tensorflow install in requirements.txt(need tensorflow)
