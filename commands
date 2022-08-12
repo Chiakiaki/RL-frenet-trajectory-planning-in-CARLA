@@ -97,11 +97,17 @@ python3 monitor_plot.py --agent_ids 111 1111 --window_size 10 --colors red blue 
 python3 monitor_plot.py --agent_ids 201111 301111 20111 --window_size 10 --colors red blue green --lr bdp bdp a2c2 --alpha 0.1 --n_steps 1e7
 python3 monitor_plot.py --agent_ids 21111 211110 20111 --window_size 100 --colors red blue green --lr bdp bdp7e3 a2c --alpha 0.1 --n_steps 1e8
 
-python3 monitor_plot.py --agent_ids 21111 211110 20111 211130 244440 24441 --window_size 100 --colors red blue green orange yellow --lr bdp bdp7e3 a2c bdp_maneuver7e3 ddpg_on_params ddpg_on_params_env2 --alpha 0.1 --n_steps 1e8
+python3 monitor_plot.py --agent_ids 21111 211110 20111 211130 244440 24441 --window_size 100 --colors red blue green orange yellow --lr bdp7e-4 bdp7e-3 a2c bdp_maneuver7e3 ddpg_on_params ddpg_on_params_env2 --alpha 0.1 --n_steps 1e8
 
 python3 monitor_plot.py --agent_ids 21111 211110 20111 211130 244440 24441 --window_size 100 --colors red blue green orange yellow --lr bdp bdp7e3 a2c bdp_maneuver7e3 ddpg_on_params ddpg_on_params_env2 --alpha 0.1 --n_steps 1e8
 
-python3 monitor_plot.py --agent_ids 21111 211110 20111 211130 244440 24441 --window_size 100 --colors red blue green orange yellow gray --lr bdp bdp7e3 a2c bdp_maneuver7e3 ddpg_on_params ddpg_on_params_env2 --alpha 0.1 --n_steps 1e8
+python3 monitor_plot.py --agent_ids 21111 211110 20111 211130 244440 24441 --window_size 100 --colors red blue green orange yellow gray --lr bdp7e-4 bdp7e-3 a2c bdp_maneuver7e3 ddpg_on_params ddpg_on_params_env2 --alpha 0.1 --n_steps 1e8
+
+python3 monitor_plot.py --agent_ids 21111 211110 20111 211130 244440 24441 --window_size 100 --colors red blue green orange yellow black gray --lr bdp7e-4 bdp7e-3 a2c bdp_maneuver ddpg_on_params7e-4 ddpg_on_params7e-3 --alpha 0.1 --n_steps 1e8
+python3 monitor_plot.py --agent_ids 21111 211110 20111 211130 244440 24441 24442 --window_size 100 --colors red blue green orange yellow black gray --lr bdp7e-4 bdp7e-3 a2c bdp_maneuver ddpg_on_params7e-4 ddpg_on_params7e-4 ddpg_env1 --alpha 0.1 --n_steps 1e8
+
+
+
 
 python3 run.py --cfg_file=tools/cfgs/config.yaml --agent_id=1 --env=CarlaGymEnv-v1 
 python3 run.py --cfg_file=tools/cfgs/config_a2c.yaml --agent_id=111 --env=CarlaGymEnv-v1  --play_mode=1

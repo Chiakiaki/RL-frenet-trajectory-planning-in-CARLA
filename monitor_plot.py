@@ -64,6 +64,7 @@ def plot_rewards(agents, window_size=100, colors=None, alpha=0.2, lr=None, n_tim
                          np.add(average[i][window_size - 1:], std_dev[i]), color=colors[i], alpha=alpha)
 
     plt.title('CARLA')
+    plt.ylim([-25,25])
     plt.xlabel('TimeSteps')
     plt.ylabel('Mean_Reward-{}'.format(window_size))
     plt.legend(lr)
