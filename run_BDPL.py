@@ -140,7 +140,7 @@ if __name__ == '__main__':
         elif cfg.POLICY.NAME == 'PPO2':
             model = PPO2(policy[cfg.POLICY.NET], env, verbose=1, learning_rate = args.learning_rate, model_dir=save_path,tensorboard_log=save_path, policy_kwargs={'cnn_extractor': eval(cfg.POLICY.CNN_EXTRACTOR)})
         elif cfg.POLICY.NAME == 'TRPO':
-            model = TRPO(policy[cfg.POLICY.NET], env, verbose=1, learning_rate = args.learning_rate, model_dir=save_path,tensorboard_log=save_path, policy_kwargs={'cnn_extractor': eval(cfg.POLICY.CNN_EXTRACTOR)})
+            model = TRPO(policy[cfg.POLICY.NET], env, verbose=1, model_dir=save_path,tensorboard_log=save_path, policy_kwargs={'cnn_extractor': eval(cfg.POLICY.CNN_EXTRACTOR)})#no learning_rate
         elif cfg.POLICY.NAME =='A2C':
             model = A2C(policy[cfg.POLICY.NET], env, verbose=1, learning_rate = args.learning_rate, model_dir=save_path,tensorboard_log=save_path, policy_kwargs={'cnn_extractor': eval(cfg.POLICY.CNN_EXTRACTOR)})
         elif cfg.POLICY.NAME == 'BDP':
