@@ -5,7 +5,7 @@
 
 # CSF3 configuration part ===========
 module load compilers/gcc/8.2.0
-# module load apps/binapps/anaconda3/2019.07 #bug, the csf3 seems run this in computation node
+# module load apps/binapps/anaconda3/2019.07 #bug, the csf3 seems run this in computation node, causing inconsistency
 module load libs/cuda/10.1.243
 module load libs/gcc/glx/1.5 libs/gcc/glew/2.1.0 libs/gcc/glm/0.9.9.4 libs/gcc/glog/0.4.0
 module load mpi/gcc/openmpi/4.1.0
@@ -78,7 +78,8 @@ done
 
 # ===================================
 cd ~/RL-frenet-trajectory-planning-in-CARLA/
-python3 ./run_BDPL.py -p $port --tm_port $port_tm --cfg_file=tools/cfgs/config_a2c_CNN.yaml --agent_id=111 --env=CarlaGymEnv-v5 --planner_mode=continuous_catagorical
+python3 ./run_BDPL.py -p $port --tm_port $port_tm --cfg_file=tools/cfgs/config_trpo_CNN.yaml --agent_id=5550 --env=CarlaGymEnv-v5 --learning_rate=7e-4 --planner_mode=continuous_catagorical
+
 
 
 #now close the server pid
