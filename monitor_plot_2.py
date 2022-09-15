@@ -3,6 +3,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import argparse
 import os
+import glob
 '''
 Utility Folder in order to visualize Rewards
 Usage: place agent folder in logs/agent_xx
@@ -17,15 +18,20 @@ python reward_plotter.py --agent_ids 26 27 28 --window_size=10
 '''
 
 
-def plot_rewards(folder, window_size=100, colors=None, alpha=0.2, lr=None, n_timesteps=float('inf')):
+def plot_rewards(folder, window_size=100, colors=None, alpha=0.2, lr=None, n_timesteps=float('inf'), _filter=''):
     data = []
 
-#    for i in agents:
-#        data.append(pd.read_csv('logs/agent_{}/monitor.csv'.format(i), skiprows=1))
-    path = './logs/' + folder + '/'
-    agents = os.listdir(path)
+
+    path = './logs/' + folder + '/' + '*' + _filter + '*/'
+    names = []
+    agents = glob.glob(path)
     for i in agents:
-        data.append(pd.read_csv(path+i+'/monitor.csv', skiprows=1))    
+        names.append(i.split('/')[-2])#the last folder
+    
+
+    
+    for i in agents:
+        data.append(pd.read_csv(i+'/monitor.csv', skiprows=1))    
 
     average = []
     std_dev = []
@@ -58,7 +64,7 @@ def plot_rewards(folder, window_size=100, colors=None, alpha=0.2, lr=None, n_tim
     plt.figure(figsize=(12, 8))
 
     if lr is None:
-        lr = agents
+        lr = names
     if colors is None:
         colors = [np.random.rand(3, ) for x in agents]
 
@@ -80,10 +86,11 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--folder', nargs='+', type=str, default="v5")
 #    parser.add_argument('--agent_ids', nargs='+', type=int, default=None)
-    parser.add_argument('--window_size', type=int, default=100)
+    parser.add_argument('--window_size', type=int, default=1000)
     parser.add_argument('--colors', nargs='+', type=str, default=None)
     parser.add_argument('--lr', nargs='+', type=str, default=None)
     parser.add_argument('--alpha', type=float, default=0.15)
     parser.add_argument('--n_steps', type=float, default=1e7)
+    parser.add_argument('--filter', type=str, default='')
     args = parser.parse_args()
-    plot_rewards(args.folder, args.window_size, args.colors, args.alpha, args.lr, args.n_steps)
+    plot_rewards(args.folder, args.window_size, args.colors, args.alpha, args.lr, args.n_steps, args.filter)
