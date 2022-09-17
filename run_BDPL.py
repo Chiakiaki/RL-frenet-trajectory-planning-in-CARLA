@@ -39,6 +39,7 @@ def parse_args_cfgs():
     parser.add_argument('--env', help='environment ID', type=str, default='CarlaGymEnv-v1')
     parser.add_argument('--log_interval', help='Log interval (model)', type=int, default=100)
     parser.add_argument('--agent_id', type=int, default=None),
+    parser.add_argument('--test_dir', type=str, default=None),
     parser.add_argument('--num_timesteps', type=float, default=1e7),
     parser.add_argument('--save_path', help='Path to save trained model to', default=None, type=str)
     parser.add_argument('--log_path', help='Directory to save learning curve data.', default=None, type=str)
@@ -58,9 +59,14 @@ def parse_args_cfgs():
     args = parser.parse_args()
 
     args.num_timesteps = int(args.num_timesteps)
-
+    print(args.test_dir)
     if args.test and args.cfg_file is None:
-        path = 'logs/agent_{}/'.format(args.agent_id)
+        if args.agent_id is not None:
+            path = 'logs/agent_{}/'.format(args.agent_id)
+        elif args.test_dir is not None:
+            path = 'logs/' + args.test_dir + '/'
+        else:
+            raise NotImplementedError
         conf_list = [cfg_file for cfg_file in os.listdir(path) if '.yaml' in cfg_file]
         args.cfg_file = path + conf_list[0]
 
@@ -172,8 +178,8 @@ if __name__ == '__main__':
     else:  # test
         if args.agent_id is not None:
             save_path = 'logs/agent_{}/models/'.format(args.agent_id)
-        else:
-            save_path = 'logs/'
+        elif args.test_dir is not None:
+            save_path = 'logs/' + args.test_dir + '/models/'
 
         if args.test_model == '':
             best_last = 'best'

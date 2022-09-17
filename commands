@@ -83,6 +83,8 @@ export CARLA_ROOT=~/CARLA_0.9.9.2/
 export PYTHONPATH="${CARLA_ROOT}/PythonAPI/carla/dist/carla-0.9.9-py3.7-linux-x86_64.egg":${PYTHONPATH}
 cd ~/RL-frenet-trajectory-planning-in-CARLA/
 python3 run.py --agent_id=1 --env=CarlaGymEnv-v4 --test
+python3 run.py --test_dir=v5/ddpg_cc_7en4 --planner_mode=continuous_catagorical --env=CarlaGymEnv-v5 --test --play_mode=1
+python3 run.py --test_dir=v5_bad/trpoCNN_cc_7en4 --planner_mode=continuous_catagorical --env=CarlaGymEnv-v5 --test --play_mode=1
 
 train args:
 --cfg_file=tools/cfgs/config_bdp.yaml --agent_id=1111 --env=CarlaGymEnv-v4  --play_mode=1
