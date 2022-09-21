@@ -120,7 +120,7 @@ if __name__ == '__main__':
                 f.close()
 
             # save a copy of config file
-            original_adr = currentPath + '/tools/cfgs/' + args.cfg_file.split('/')[-1]
+            original_adr = currentPath + '/tools/cfgs_10vehicles/' + args.cfg_file.split('/')[-1]
             target_adr = currentPath + '/logs/agent_{}/'.format(args.agent_id) + args.cfg_file.split('/')[-1]
             shutil.copyfile(original_adr, target_adr)
 

@@ -78,8 +78,7 @@ done
 
 # ===================================
 cd ~/RL-frenet-trajectory-planning-in-CARLA/
-python3 ./run_BDPL.py -p $port --tm_port $port_tm --cfg_file=tools/cfgs/config_trpo.yaml --agent_id=5550 --env=CarlaGymEnv-v5 --learning_rate=7e-4 --planner_mode=continuous_catagorical
-
+python3 ./run_BDPL.py -p $port --tm_port $port_tm --cfg_file=tools/cfgs_10vehicles/config_trpo.yaml --agent_id=5550 --env=CarlaGymEnv-v5 --learning_rate=7e-4 --planner_mode=continuous_catagorical
 
 
 #now close the server pid

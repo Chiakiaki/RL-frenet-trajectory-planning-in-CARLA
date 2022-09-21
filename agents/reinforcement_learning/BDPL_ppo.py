@@ -29,7 +29,7 @@ from stable_baselines.common.input import observation_input
 from stable_baselines.a2c.utils import conv, linear, conv_to_fc, batch_to_seq, seq_to_batch, lstm, conv1d
 import warnings
 #from carla_frenet_RL_external_sampler import Carla_frenet_RL_external_sampler
-from util import Process_batch_for_BDP
+from util import Process_batch_for_BDP,ReplayBuffer_QAQ
 """End"""
 
 
@@ -725,7 +725,7 @@ class ExternalSampler_GymDiscreteAction(ExternalSampler):
     
     
 
-class BDPLRunner(AbstractEnvRunner):
+class BDPLRunner_ppo(AbstractEnvRunner):
     def __init__(self, env, model, n_steps=5, gamma=0.99):
         """
         A runner to learn the policy of an environment for an a2c model
@@ -735,8 +735,11 @@ class BDPLRunner(AbstractEnvRunner):
         :param n_steps: (int) The number of steps to run for each environment
         :param gamma: (float) Discount factor
         """
-        super(BDPLRunner, self).__init__(env=env, model=model, n_steps=n_steps)
+        super(BDPLRunner_ppo, self).__init__(env=env, model=model, n_steps=n_steps)
         self.gamma = gamma
+        
+        #replay_buffer
+        self.replay_buffer = ReplayBuffer_QAQ(size = 500)
 
     def _run(self):
         """
@@ -797,7 +800,7 @@ class BDPLRunner(AbstractEnvRunner):
             
             a_label_episode.append(actions_idx)#(T,1)
             prob_episode.append(prob_n)#(T,n)
-            all_a_episode.append(ac_candidates)#(T,)
+            all_a_episode.append(ac_candidates)#(T,?)
             num_a_list.append(n_ac_candidates)#(T,n,d)
             
             
@@ -847,7 +850,7 @@ class BDPLRunner(AbstractEnvRunner):
         mb_dones = mb_dones[:, 1:]
         true_rewards = np.copy(mb_rewards)
         #TODO if using buffer, this self.model.value will be late and should be changed
-        last_values = self.model.value(self.obs, self.states, self.dones).tolist()#(1,)
+        last_values = self.model.value(self.obs, self.states, self.dones).tolist()#(1,),since n_env is 1
         # discount/bootstrap off value fn
         for n, (rewards, dones, value) in enumerate(zip(mb_rewards, mb_dones, last_values)):
             rewards = rewards.tolist()
@@ -864,4 +867,11 @@ class BDPLRunner(AbstractEnvRunner):
         mb_values = mb_values.reshape(-1, *mb_values.shape[2:])#(sum of n_ac_candidates,)
         mb_masks = mb_masks.reshape(-1, *mb_masks.shape[2:])#(masks is left 1 shift of dones, probably used for lstm, but haven't implemented here)
         true_rewards = true_rewards.reshape(-1, *true_rewards.shape[2:])#(T,)
+        
+        #now use replay_buffer, only for n_env = 1
+#        self.replay_buffer.store_frames(list(mb_obs),all_a_episode,prob_episode,?,?,a_label_episode,num_a_list,list(mb_dones),None,None)
+        
+        
+        
+        
         return mb_obs, mb_states, mb_rewards, mb_masks, None, mb_values, ep_infos, true_rewards,a_label,prob_n,all_a,num_a

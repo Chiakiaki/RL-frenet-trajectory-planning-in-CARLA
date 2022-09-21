@@ -72,7 +72,7 @@ def Process_batch_for_BDP(rollout):
     
     """same for rew_batch,values"""
     all_rew_batch = []
-    fun2(num_a_batch,rewards,all_rew_batch)
+    fun2(num_a_batch,rewards,all_rew_batch)#rewards:(T,) all rewards:()
     all_rew_batch = np.asarray(all_rew_batch,dtype=np.float32)
     all_value = []
     fun2(num_a_batch,values,all_value)
@@ -81,3 +81,295 @@ def Process_batch_for_BDP(rollout):
     """"""
     #masks is not used for mlp
     return all_obs_batch,states,all_rew_batch,masks,actions,all_value,ep_infos,true_reward,a_label,prob,all_a, num_a_batch, a_label_batch, grouping2
+
+
+
+class ReplayBuffer_QAQ(object):
+
+
+    def __init__(self, size):
+        """specially designed
+        
+        Parameters
+        ----------
+        size: int
+            Max number of transitions to store in the buffer. When the buffer
+            overflows the old memories are dropped.        
+        """
+        self.size = size
+
+        self.next_idx      = 0
+        self.num_in_buffer = 0
+        self.num_can_sample = 0
+
+
+        self.obs      = None
+        self.all_a    = None
+        self.reward   = None
+        self.reward2 = None
+        self.done     = None
+        self.collision = None
+        self.a_label  = None #which traj is the gt
+        self.num_a    = None #num of trajs for each state
+
+    def can_sample(self, batch_size):
+        """Returns true if `batch_size` different transitions can be sampled from the buffer."""
+        return batch_size <= self.num_can_sample
+    
+    def _encode_sample(self, idxes, batch_size, sars):
+        
+        
+        all_a_batch    = np.concatenate([ self.all_a[idx] for idx in idxes],axis = 0)
+        if self.has_prob:
+            prob_batch     = np.concatenate([ self.prob[idx] for idx in idxes],axis = 0)
+        else:#no prob stored, but still lets return sth.
+            prob_batch     = np.array([ self.prob[idx] for idx in idxes])#this is nothing
+        
+        if self.has_value:
+            value     = self.value[idxes]
+            next_value= self.value[(np.array(idxes) + 1) % self.num_in_buffer]
+        else:
+            value     = None
+            next_value= None
+            
+        rew_batch      = self.reward[idxes]
+        rew2_batch     = self.reward2[idxes]        
+        obs_batch      = self.obs[idxes]
+        next_obs_batch = self.obs[(np.array(idxes) + 1) % self.num_in_buffer]
+        a_tmp        = self.a_label[idxes]
+        num_a_batch = self.num_a[idxes]
+        done_batch = self.done[idxes]
+
+        def fun1(num_a_batch):
+            tmd1 = []
+            tmd2 = []
+            tmp2 = np.cumsum(num_a_batch,dtype = np.int32)
+            tmp3 = np.concatenate([[0],tmp2[:-1]])
+            for (i,_) in enumerate(num_a_batch):
+                tmd1 += [tmp2[i]] * num_a_batch[i]
+                tmd2 += [tmp3[i]] * num_a_batch[i]
+            n = np.shape(tmd1)[0]
+            ret1 = (tmd1,np.arange(n,dtype = np.int32))  
+            ret2 = (tmd2,np.arange(n,dtype = np.int32)) 
+            return ret1,ret2,tmp2
+            
+        
+        
+        tmp1,tmp2,cumsum = fun1(num_a_batch)
+
+
+        """like, num_a_batch=[2,1,2]
+        fun1(num_a_batch) -> 
+        tmp1 = ([2, 2, 3, 5, 5], array([0, 1, 2, 3, 4], dtype=int32)
+        tmp2 = ([0, 0, 2, 3, 3], array([0, 1, 2, 3, 4], dtype=int32))
+        
+        -> grouping = 
+        [ , ,  ,  ,  ]
+        [1,1,-1,  ,  ]
+        [ , , 1,-1,-1]
+        [ , ,  ,  ,  ]
+        [ , ,  , 1, 1]
+        """
+        n = np.shape(tmp1[0])[0]
+        grouping = np.zeros([n+1,n],dtype = np.int32)
+        grouping[tmp1] = 1
+        grouping[tmp2] = -1
+        grouping = grouping[1:,:]
+
+        """like, num_a_batch=[2,1,2]
+        -> grouping2 = 
+        array([[1., 1., 0., 0., 0.],
+               [0., 0., 1., 0., 0.],
+               [0., 0., 0., 1., 1.]])
+
+        this is the mask for the numerical problem solved by softmax
+        """
+        tmp3 = [np.ones([1,i]) for i in num_a_batch]
+        grouping2 = sc.linalg.block_diag(*tmp3)
+
+        a_label_batch = np.zeros([n],dtype = np.int32)
+        cumsum0 = np.concatenate([[0],cumsum[:-1]])
+        a_label_idx = a_tmp + cumsum0
+        a_label_batch[a_label_idx] = 1
+        act_batch = all_a_batch[a_label_idx]
+        """like, num_a_batch=[2,1,2], a_tmp = [1,0,1]
+        -> a_label_idx = l_idarray([1, 2, 4])        all_obs_batch = []
+        for (i,_) in enumerate(num_a_batch):
+            all_obs_batch += [obs_batch[i]] * num_a_batch[i]
+        -> a_label_batch = array([0, 1, 1, 0, 1], dtype=int32)
+        """
+
+        """like, we need to duplicate obs_batch, so that to have same length
+        with all_a_batch
+
+        obs_batch = np.eye(3)
+        num_a_batch = [2,1,2]
+
+        -> all_obs_batch = 
+        [array([1., 0., 0.]),
+         array([1., 0., 0.]),
+         array([0., 1., 0.]),
+         array([0., 0., 1.]),
+         array([0., 0., 1.])]
+        """
+        all_obs_batch = []
+        def fun2(num_a_batch,obs_batch,all_obs_batch):
+            for (i,_) in enumerate(num_a_batch):
+                all_obs_batch += [obs_batch[i]] * num_a_batch[i]
+        fun2(num_a_batch,obs_batch,all_obs_batch)
+
+        """same for rew_batch"""
+        all_rew_batch = []
+        fun2(num_a_batch,rew_batch,all_rew_batch)
+        all_rew2_batch = []
+        fun2(num_a_batch,rew2_batch,all_rew2_batch)
+#        done_mask      = np.array([1.0 if self.done[idx] else 0.0 for idx in idxes], dtype=np.float32)
+
+        next_idxes = (np.array(idxes) + 1) % self.num_in_buffer
+        if sars == True:
+            next_state_things = self._encode_sample(next_idxes,batch_size,sars = False)
+            return all_obs_batch, all_a_batch, prob_batch, all_rew_batch, all_rew2_batch, grouping, a_label_batch, grouping2, act_batch, obs_batch, rew_batch, next_obs_batch, done_batch,num_a_batch,value,next_value,next_state_things
+
+        return all_obs_batch, all_a_batch, prob_batch, all_rew_batch, all_rew2_batch, grouping, a_label_batch, grouping2, act_batch, obs_batch, rew_batch, next_obs_batch, done_batch,num_a_batch,value,next_value
+
+
+    def sample(self, batch_size, sars = False):
+        #by default, return s-a-r
+
+        assert self.can_sample(batch_size)
+        
+        idxes = sample_n_unique(lambda: random.randint(0, self.num_can_sample - 1), batch_size)
+        idxes = idxes + self.shift_of_idxes[idxes]#we don't want to sample out a 'done but not collision' state 
+        
+#        if sars == True:
+#            idxes = sample_n_unique(lambda: random.randint(0, self.num_can_sample - 1), batch_size)
+#            idxes = idxes + self.shift_of_idxes[idxes]
+#        else:
+#            idxes = sample_n_unique(lambda: random.randint(0, self.num_in_buffer - 1), batch_size)
+
+        return self._encode_sample(idxes,batch_size,sars = sars)
+
+
+    def store_frames2(self,rollout):
+        """
+        wrapper to use this replay buffer
+        """
+        obs_batch, states, rewards, masks, actions, values, ep_infos, true_reward,a_label,prob,all_a, num_a_batch = rollout
+        raise NotImplementedError
+
+    def store_frames(self, s_episode, all_a_episode, prob_episode, r_episode, r2_episode, a_label_episode, num_traj_list, done,collision = None,value_episode = None):
+        """
+        store multiple frames, mostly for a batch or episode
+
+        Parameters
+        ----------
+        s_episode - list
+        all_a_episode - list of array
+        r_episode - list
+        r2_episode - list
+        a_label_episode - list (not one-hot)
+        num_traj_list - list
+        done - list. If it is a dead state. 1 == dead
+        value_episode - list
+        """
+        
+        
+        
+        if collision is None:
+            collision = done
+        
+        n = np.shape(s_episode)[0]        
+        n_a = np.sum(num_traj_list)
+
+        st = self.next_idx
+        ed = self.next_idx+n
+        
+        if n == 0:
+            return st
+        
+        if prob_episode == None:
+            self.has_prob = False
+            prob_episode = list(np.ones(n))
+        else:
+            self.has_prob = True
+            prob_episode = list(prob_episode)
+            
+        if value_episode is not None:
+            self.has_value = True
+        else:
+            self.has_value = False
+
+        if self.obs is None:
+            self.obs      = np.empty([self.size] + list(s_episode[0].shape), dtype=np.float32)
+            self.all_a    = []#dynamic vector
+            self.prob     = []#dynamic vector
+            self.reward   = np.empty([self.size],                     dtype=np.float32)
+            self.reward2  = np.empty([self.size],                     dtype=np.float32)
+            self.done     = np.empty([self.size],                     dtype=np.int32)
+            self.collision     = np.empty([self.size],                     dtype=np.int32)
+            self.a_label  = np.empty([self.size],                     dtype=np.int32)
+            self.num_a  = np.empty([self.size],                     dtype=np.int32)
+            self.value    = np.empty([self.size],                     dtype=np.float32)
+
+        if ed > self.size:
+            part2 = ed - self.size            
+            part1 = self.size - st#always >= 1
+            self.obs[st:st+part1] = s_episode[:part1]
+            self.obs[:part2] = s_episode[part1:]
+            if self.num_in_buffer < self.size:
+                self.all_a += all_a_episode[:part1]
+                self.prob += prob_episode[:part1]
+            else:
+                self.all_a[-part1:] = all_a_episode[:part1]
+                self.prob[-part1:] = prob_episode[:part1]
+            self.all_a[:part2] = all_a_episode[part1:]
+            self.prob[:part2] = prob_episode[part1:]
+            self.reward[st:st+part1] = r_episode[:part1]
+            self.reward[:part2] = r_episode[part1:]
+            self.reward2[st:st+part1] = r2_episode[:part1]
+            self.reward2[:part2] = r2_episode[part1:]
+            self.a_label[st:st+part1] = a_label_episode[:part1]
+            self.a_label[:part2] = a_label_episode[part1:]
+            self.num_a[st:st+part1] = num_traj_list[:part1]
+            self.num_a[:part2] = num_traj_list[part1:]
+            self.done[st:st+part1] = done[:part1]
+            self.done[:part2] = done[part1:]
+            self.collision[st:st+part1] = collision[:part1]
+            self.collision[:part2] = collision[part1:]
+            
+            if self.has_value:
+                self.value[st:st+part1] = value_episode[:part1]
+                self.value[:part2] = value_episode[part1:]                
+
+
+        else:
+            self.obs[self.next_idx:self.next_idx+n] = s_episode
+            self.all_a[self.next_idx:self.next_idx+n] = all_a_episode
+            self.prob[self.next_idx:self.next_idx+n] = prob_episode
+            self.reward[self.next_idx:self.next_idx+n] = r_episode
+            self.reward2[self.next_idx:self.next_idx+n] = r2_episode
+            self.a_label[self.next_idx:self.next_idx+n] = a_label_episode
+            self.num_a[self.next_idx:self.next_idx+n] = num_traj_list
+            self.done[self.next_idx:self.next_idx+n] = done
+            self.collision[self.next_idx:self.next_idx+n] = collision
+            
+            if self.has_value:
+                self.value[self.next_idx:self.next_idx+n] = r_episode
+            
+        self.next_idx = (self.next_idx + n) % self.size
+
+        self.num_in_buffer = min(self.size, self.num_in_buffer + n)
+        self.done_not_collision = np.where(self.collision[:self.num_in_buffer] != self.done[:self.num_in_buffer])[0]
+
+        self.num_can_sample = self.num_in_buffer - len(self.done_not_collision)#for special treatment for 'done' but not 'collision'
+        
+        tmp = np.zeros(self.num_in_buffer,dtype = np.int32)
+#        tmp[self.done_not_collision] = 1#this is wrong code!!!!!!!!!!!!
+#        self.shift_of_idxes = np.cumsum(tmp)#this is wrong code!!!!!!!!!!!!
+#       below is the right one
+        tmp2 = self.done_not_collision - np.arange(len(self.done_not_collision))
+        tmp[tmp2] += 1
+        self.shift_of_idxes = np.cumsum(tmp)
+        
+        
+        return st
