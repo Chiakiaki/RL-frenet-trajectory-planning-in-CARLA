@@ -69,8 +69,10 @@ class model1(object):
         self.stablizing = - tf.reduce_sum( self.logits_nd* (self.old_prob_placeholder_nd - tf.stop_gradient(self.prob_nd)),axis = 1)
         self.stablizing = tf.reduce_mean(self.stablizing)
         
-        self.train_op = tf.train.GradientDescentOptimizer(3e-3).minimize(self.loss1)
-        self.train_op2 = tf.train.GradientDescentOptimizer(3e-3).minimize(self.loss1+self.stablizing)
+        reward = (np.random.rand(1)*2-1 )
+#        reward = 1
+        self.train_op = tf.train.GradientDescentOptimizer(3e-3).minimize(self.loss1 * reward)
+        self.train_op2 = tf.train.GradientDescentOptimizer(3e-3).minimize( (self.loss1 * reward + self.stablizing) )
 
 
 
@@ -83,7 +85,7 @@ label = np.array([0,0,0,0,1],dtype = np.float32)
 label = np.tile(label,[20,1])
 
 """
-#this part is to validate that, the loss1,loss2,loss3 will yield SAME gradients!!!(Note, only when label sum to 1!!!!!!, otherwise loss3 does not provide correct gradient)
+#this part is to validate that, the loss1,loss2,loss3 will yield SAME gradients.
 #so, minimize loss1,loss2,loss3 are equivalent. They are just three different coding.
 
 with tf.Session() as sess:
@@ -131,7 +133,7 @@ with tf.Session() as sess:
 
         """train model with labels"""
         feed_dict = {model.s_placeholder_nds:input1,model.gt_placeholder_nd:lb,model.old_prob_placeholder_nd:prob_old}
-        _,_ = sess.run([model.train_op,model.prob_nd],feed_dict = feed_dict)
+        _,_ = sess.run([model.train_op2,model.prob_nd],feed_dict = feed_dict)
         prob_history.append(prob)
         logits_history.append(logits)
 
