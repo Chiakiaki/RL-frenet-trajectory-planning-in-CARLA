@@ -88,7 +88,8 @@ if __name__ == '__main__':
     if args.play_mode:
         env.enable_auto_render()
     env.begin_modules(args)
-    n_actions = env.action_space.shape[-1]  # ??? wull be scalar 1
+    if cfg.POLICY.NAME == 'DDPG':
+        n_actions = env.action_space.shape[-1]  # ??? wull be scalar 1
     
     
 #    localtime = time.strftime("%Y%m%d%H%M%S")

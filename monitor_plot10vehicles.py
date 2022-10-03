@@ -18,13 +18,18 @@ python reward_plotter.py --agent_ids 26 27 28 --window_size=10
 '''
 
 
-def plot_rewards(folder, window_size=100, colors=None, alpha=0.2, lr=None, n_timesteps=float('inf'), _filter=''):
+def plot_rewards(folder, window_size=100, colors=None, alpha=0.2, lr=None, n_timesteps=float('inf'), filter_list=['']):
     data = []
-
-
-    path = './logs/' + folder + '/' + '*' + _filter + '*/'
-    names = []
-    agents = glob.glob(path)
+    
+    filter_ = ''
+    agents=[]
+    for filter_i in filter_list:
+        path = './logs/' + folder + '/' + '*' + filter_i + '*/'
+        names = []
+        agents_i = glob.glob(path)
+        agents += agents_i
+    agents = list(set(agents))
+        
     for i in agents:
         names.append(i.split('/')[-2])#the last folder
     
@@ -75,7 +80,6 @@ def plot_rewards(folder, window_size=100, colors=None, alpha=0.2, lr=None, n_tim
 
     plt.title('CARLA')
     plt.ylim([-25,75])
-    #plt.xlim([0,100000])
     plt.xlabel('TimeSteps')
     plt.ylabel('Mean_Reward-{}'.format(window_size))
     plt.legend(lr)
@@ -92,6 +96,6 @@ if __name__ == '__main__':
     parser.add_argument('--lr', nargs='+', type=str, default=None)
     parser.add_argument('--alpha', type=float, default=0.15)
     parser.add_argument('--n_steps', type=float, default=1e7)
-    parser.add_argument('--filter', type=str, default='')
+    parser.add_argument('--filter', nargs='+', type=str, default=[''])
     args = parser.parse_args()
     plot_rewards(args.folder, args.window_size, args.colors, args.alpha, args.lr, args.n_steps, args.filter)

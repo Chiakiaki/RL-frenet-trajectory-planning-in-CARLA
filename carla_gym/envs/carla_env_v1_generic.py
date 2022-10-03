@@ -65,7 +65,8 @@ class CarlaGymEnv(gym.Env):
         mode: one  of bdp, ddpg, catagorical
         """
         self.mode = kwargs['mode']
-        
+        self.num_traj = 3
+        #TODO: num_traj config
         
         
         self.__version__ = "9.9.2"
@@ -132,11 +133,19 @@ class CarlaGymEnv(gym.Env):
             action_low = np.array([-1.]*(self.T_ac_candidates*2))#-1 because we use 'yaw_change' for action feature 
             action_high = np.array([1.]*(self.T_ac_candidates*2))
             self.action_space = gym.spaces.Box(low = action_low, high=action_high, shape=([self.T_ac_candidates*2]), dtype=np.float32)
+        elif self.mode == 'bdpCatagorical':
+            """still box as space, but only give one-hot label"""
+            action_low = np.array([-1.]*(self.num_traj))#-1 because we use 'yaw_change' for action feature 
+            action_high = np.array([1.]*(self.num_traj))
+            self.action_space = gym.spaces.Box(low = action_low, high=action_high, shape=([self.num_traj]), dtype=np.float32)
         elif self.mode == 'continuous_catagorical':
             """original action space of env_v1"""
             action_low = np.array([-1])
             action_high = np.array([1])
             self.action_space = gym.spaces.Box(low=action_low, high=action_high, dtype=np.float32)
+        elif self.mode == 'catagorical':
+            """catagorical"""
+            self.action_space = gym.spaces.Discrete(self.num_traj)
         elif self.mode == 'ddpg_on_params':
             """ddpg while action space is frenet params df and vf"""
             action_low = np.array([-1.,-1.])
@@ -560,11 +569,15 @@ class CarlaGymEnv(gym.Env):
             return ac2,len(self.bdpl_path_list)
         elif self.mode == 'continuous_catagorical':
             return np.array([[0.],[-1.],[1.]]),3#must be correctly set, is related to lane-change reward
+            #note bdp does not implemented continuous catagorical
+        elif self.mode == 'bdpCatagorical':
+            return np.eye(3),3
 
 
         
     def step(self, action=None):
         #for dev
+        print(action)
         if self.bdpl_path_list is None:
             # so external_sampler not called, call it now
             # to be compatible with original.
@@ -575,7 +588,7 @@ class CarlaGymEnv(gym.Env):
         in Boltzmann Distribution Policy Learning, the env.step need not return all infomation to candidate actions,
         they just need to return some feature. The model just do 'select', not create.
         """
-        if self.mode == 'catagorical' or self.mode == 'bdp':
+        if self.mode == 'catagorical' or self.mode == 'bdp' or self.mode == 'bdpCatagorical':
             assert type(action) is int or np.int32 or np.int64, "error action %d is not type int" % action
             fpath = self.bdpl_path_list[action]
             self.lanechange = self.tmp_lanechange[action]
