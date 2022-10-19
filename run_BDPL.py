@@ -22,7 +22,9 @@ from stable_baselines.common.noise import NormalActionNoise, OrnsteinUhlenbeckAc
 from stable_baselines import DDPG
 from stable_baselines import PPO2
 from stable_baselines import TRPO
-from stable_baselines import A2C
+from stable_baselines.deepq.policies import CnnPolicy as DQNCnnPolicy
+from stable_baselines.deepq.policies import MlpPolicy as DQNMlpPolicy
+from stable_baselines import A2C, DQN
 from stable_baselines.common.policies import BasePolicy, nature_cnn, register_policy, sequence_1d_cnn, sequence_1d_cnn_ego_bypass_tc
 
 
@@ -98,6 +100,8 @@ if __name__ == '__main__':
     # --------------------------------------------------------------------------------------------------------------------
     if cfg.POLICY.NAME == 'DDPG':
         policy = {'MLP': DDPGMlpPolicy, 'CNN': DDPGCnnPolicy}   # DDPG does not have LSTM policy
+    elif cfg.POLICY.NAME == 'DQN':
+        policy = {'MLP': DQNMlpPolicy, 'CNN': DQNCnnPolicy}
     elif cfg.POLICY.NAME == 'BDP':
         policy = {'MLP': FeedForwardBoltzmannDistributionPolicy}
     else:
@@ -144,6 +148,9 @@ if __name__ == '__main__':
             param_noise = AdaptiveParamNoiseSpec(initial_stddev=float(cfg.POLICY.PARAM_NOISE_STD),
                                                  desired_action_stddev=float(cfg.POLICY.PARAM_NOISE_STD))
             model = DDPG(policy[cfg.POLICY.NET], env, verbose=1, param_noise=param_noise, action_noise=action_noise, actor_lr = args.learning_rate,  tensorboard_log=save_path, policy_kwargs={'cnn_extractor': eval(cfg.POLICY.CNN_EXTRACTOR)})
+        elif cfg.POLICY.NAME == 'DQN':
+            #note: DQN cannot work on contiuous action space env
+            model = DQN(policy[cfg.POLICY.NET], env, verbose=1, learning_rate = args.learning_rate, tensorboard_log=save_path,  policy_kwargs={'cnn_extractor': eval(cfg.POLICY.CNN_EXTRACTOR)})
         elif cfg.POLICY.NAME == 'PPO2':
             model = PPO2(policy[cfg.POLICY.NET], env, verbose=1, learning_rate = args.learning_rate, model_dir=save_path,tensorboard_log=save_path, policy_kwargs={'cnn_extractor': eval(cfg.POLICY.CNN_EXTRACTOR)})
         elif cfg.POLICY.NAME == 'TRPO':

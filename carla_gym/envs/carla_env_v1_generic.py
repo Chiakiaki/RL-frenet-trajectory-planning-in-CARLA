@@ -577,7 +577,7 @@ class CarlaGymEnv(gym.Env):
         
     def step(self, action=None):
         #for dev
-        print(action)
+#        print(action)
         if self.bdpl_path_list is None:
             # so external_sampler not called, call it now
             # to be compatible with original.
