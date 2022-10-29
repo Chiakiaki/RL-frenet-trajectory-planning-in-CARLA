@@ -8,6 +8,71 @@ Created on Mon Jun 27 00:24:23 2022
 import numpy as np
 import scipy as sc
 
+import tensorflow as tf
+from itertools import zip_longest
+from stable_baselines.a2c.utils import conv, linear, conv_to_fc, batch_to_seq, seq_to_batch, lstm, conv1d
+
+def mlp_extractor(flat_observations, net_arch, act_fun, not_constructing=''):
+    """
+    Remarks: copy past from policy. add 'not_constracting' to reduce unnecessary memory cost
+    
+    Constructs an MLP that receives observations as an input and outputs a latent representation for the policy and
+    a value network. The ``net_arch`` parameter allows to specify the amount and size of the hidden layers and how many
+    of them are shared between the policy network and the value network. It is assumed to be a list with the following
+    structure:
+
+    1. An arbitrary length (zero allowed) number of integers each specifying the number of units in a shared layer.
+       If the number of ints is zero, there will be no shared layers.
+    2. An optional dict, to specify the following non-shared layers for the value network and the policy network.
+       It is formatted like ``dict(vf=[<value layer sizes>], pi=[<policy layer sizes>])``.
+       If it is missing any of the keys (pi or vf), no non-shared layers (empty list) is assumed.
+
+    For example to construct a network with one shared layer of size 55 followed by two non-shared layers for the value
+    network of size 255 and a single non-shared layer of size 128 for the policy network, the following layers_spec
+    would be used: ``[55, dict(vf=[255, 255], pi=[128])]``. A simple shared network topology with two layers of size 128
+    would be specified as [128, 128].
+
+    :param flat_observations: (tf.Tensor) The observations to base policy and value function on.
+    :param net_arch: ([int or dict]) The specification of the policy and value networks.
+        See above for details on its formatting.
+    :param act_fun: (tf function) The activation function to use for the networks.
+    :return: (tf.Tensor, tf.Tensor) latent_policy, latent_value of the specified network.
+        If all layers are shared, then ``latent_policy == latent_value``
+    """
+    latent = flat_observations
+    policy_only_layers = []  # Layer sizes of the network that only belongs to the policy network
+    value_only_layers = []  # Layer sizes of the network that only belongs to the value network
+
+    # Iterate through the shared layers and build the shared parts of the network
+    for idx, layer in enumerate(net_arch):
+        if isinstance(layer, int):  # Check that this is a shared layer
+            layer_size = layer
+            latent = act_fun(linear(latent, "shared_fc{}".format(idx), layer_size, init_scale=np.sqrt(2)))
+        else:
+            assert isinstance(layer, dict), "Error: the net_arch list can only contain ints and dicts"
+            if 'pi' in layer:
+                assert isinstance(layer['pi'], list), "Error: net_arch[-1]['pi'] must contain a list of integers."
+                policy_only_layers = layer['pi']
+
+            if 'vf' in layer:
+                assert isinstance(layer['vf'], list), "Error: net_arch[-1]['vf'] must contain a list of integers."
+                value_only_layers = layer['vf']
+            break  # From here on the network splits up in policy and value network
+
+    # Build the non-shared part of the network
+    latent_policy = latent
+    latent_value = latent
+    for idx, (pi_layer_size, vf_layer_size) in enumerate(zip_longest(policy_only_layers, value_only_layers)):
+        if not_constructing != 'pi':
+            if pi_layer_size is not None:
+                assert isinstance(pi_layer_size, int), "Error: net_arch[-1]['pi'] must only contain integers."
+                latent_policy = act_fun(linear(latent_policy, "pi_fc{}".format(idx), pi_layer_size, init_scale=np.sqrt(2)))
+        if not_constructing != 'vf':
+            if vf_layer_size is not None:
+                assert isinstance(vf_layer_size, int), "Error: net_arch[-1]['vf'] must only contain integers."
+                latent_value = act_fun(linear(latent_value, "vf_fc{}".format(idx), vf_layer_size, init_scale=np.sqrt(2)))
+
+    return latent_policy, latent_value
 
 def Process_batch_for_BDP(rollout):
     """
@@ -81,6 +146,84 @@ def Process_batch_for_BDP(rollout):
     """"""
     #masks is not used for mlp
     return all_obs_batch,states,all_rew_batch,masks,actions,all_value,ep_infos,true_reward,a_label,prob,all_a, num_a_batch, a_label_batch, grouping2
+
+
+
+def Process_batch_for_BDP_trpo(rollout):
+    """
+    #for trpo, remove some not needed arguments
+    
+    E.g. if for observation s0, there are a0,a1 two candidates action,
+    then we must align them, which means observation batch should be
+    [s0,s0], and action batch should be [a0,a1]. num_a_batch will provide
+    information for this
+    
+    
+    Previously, a replaybuffer is implemented. Here, for comparison purpose, we do not use it
+    Copy past from replaybuffer implementation
+    """
+    obs_batch, rewards, values,a_label,all_a, num_a_batch = rollout
+    
+    a_label = np.squeeze(a_label)#should be 1-D
+
+
+    tmp3 = [np.ones([1,i]) for i in num_a_batch]
+    grouping2 = sc.linalg.block_diag(*tmp3)
+    """like, num_a_batch=[2,1,2]
+    -> grouping2 = 
+    array([[1., 1., 0., 0., 0.],
+           [0., 0., 1., 0., 0.],
+           [0., 0., 0., 1., 1.]])
+
+    this is the mask for the numerical problem solved by softmax
+    """
+
+    cumsum = np.cumsum(num_a_batch,dtype = np.int32)
+    n = cumsum[-1]
+    cumsum0 = np.concatenate([[0],cumsum[:-1]])
+    a_label_batch = np.zeros([n],dtype = np.float32)
+    a_label_idx = a_label + cumsum0
+    a_label_batch[a_label_idx] = 1.
+    """like, num_a_batch=[2,1,2], a_label = [1,0,1]
+    -> a_label_idx = l_idarray([1, 2, 4])        
+    all_obs_batch = []
+    for (i,_) in enumerate(num_a_batch):
+        all_obs_batch += [obs_batch[i]] * num_a_batch[i]
+    -> a_label_batch = array([0, 1, 1, 0, 1], dtype=int32)
+    """    
+
+    all_obs_batch = []
+    def fun2(num_a_batch,obs_batch,all_obs_batch):
+        for (i,_) in enumerate(num_a_batch):
+            all_obs_batch += [obs_batch[i]] * num_a_batch[i]
+    fun2(num_a_batch,obs_batch,all_obs_batch)
+    all_obs_batch = np.asarray(all_obs_batch,dtype=np.float32)
+    """like, we need to duplicate obs_batch, so that to have same length
+    with all_a_batch
+
+    obs_batch = np.eye(3)
+    num_a_batch = [2,1,2]
+
+    -> all_obs_batch = 
+    [array([1., 0., 0.]),
+     array([1., 0., 0.]),
+     array([0., 1., 0.]),
+     array([0., 0., 1.]),
+     array([0., 0., 1.])]
+    """
+    
+    """same for rew_batch,values"""
+    all_rew_batch = []
+    fun2(num_a_batch,rewards,all_rew_batch)#rewards:(T,) all rewards:()
+    all_rew_batch = np.asarray(all_rew_batch,dtype=np.float32)
+    all_value = []
+    fun2(num_a_batch,values,all_value)
+    all_value = np.asarray(all_value,dtype=np.float32)
+    
+    """"""
+    #masks is not used for mlp
+    return all_obs_batch,all_rew_batch,all_value,a_label,all_a, num_a_batch, a_label_batch, grouping2,a_label_idx
+
 
 
 

@@ -7,6 +7,10 @@ Created on Mon May 30 13:55:16 2022
 
 modified from openai stable baseline a2c
 
+remakrs from sry: this is a bp of a2c version Boltzmann Distribution Policy. Later
+                I changed the name of "variable scope" as 'model', because I find
+                that stable baseline use 'mode' variable scope to find variable
+
 """
 import time
 
@@ -24,13 +28,13 @@ from stable_baselines.ppo2.ppo2 import safe_mean
 """Added imported for BDPL"""
 from abc import ABC, abstractmethod
 from gym.spaces import Discrete
-from stable_baselines.common.policies import BasePolicy,nature_cnn,sequence_1d_cnn
+from stable_baselines.common.policies import BasePolicy,nature_cnn,sequence_1d_cnn,mlp_extractor
 from stable_baselines.common.distributions import ProbabilityDistributionType,ProbabilityDistribution
 from stable_baselines.common.input import observation_input
 from stable_baselines.a2c.utils import conv, linear, conv_to_fc, batch_to_seq, seq_to_batch, lstm, conv1d
 import warnings
 #from carla_frenet_RL_external_sampler import Carla_frenet_RL_external_sampler
-from util import Process_batch_for_BDP,mlp_extractor
+from util import Process_batch_for_BDP
 from BD_distributions import BoltzmannDistributionV1
 """End"""
         
@@ -84,13 +88,7 @@ class BoltzmannDistributionPolicy(object):
         with tf.variable_scope("input", reuse=False):
             if obs_phs is None:
                 self._obs_ph, self._processed_obs = observation_input(ob_space, n_batch, scale=scale)#(n_batch,[action_space])
-                
-                # policy has two input as ac_candidates_nd, and all_observation_nd
-                # but value function only need observation_m
-                # so, define one more input for this
-                self._obs_ph_for_vf, self._processed_obs_for_vf = observation_input(ob_space, n_batch, name='Ob_vf', scale=scale)#
             else:
-                raise NotImplementedError#what is this?
                 self._obs_ph, self._processed_obs = obs_phs
 
             self._action_ph = None
@@ -184,8 +182,6 @@ class BoltzmannDistributionPolicy(object):
             g_est_mn = g_est_mn - inf_mask #hint: exp(-inf) is 0
             prob_mn = tf.nn.softmax(g_est_mn)
             prob_n = tf.reduce_sum(prob_mn,axis = 0)
-            self._policy_proba = prob_n
-            
             prob_n = tf.stop_gradient(prob_n)
             
             self.prob_n = prob_n
@@ -223,12 +219,6 @@ class BoltzmannDistributionPolicy(object):
     def obs_ph(self):
         """tf.Tensor: placeholder for observations, shape (self.n_batch, ) + self.ob_space.shape."""
         return self._obs_ph
-    
-    @property
-    def obs_ph_for_vf(self):
-        """tf.Tensor: placeholder for observations, shape (m, ) + self.ob_space.shape."""
-        return self._obs_ph_for_vf
-
 
     @property
     def processed_obs(self):
@@ -237,15 +227,6 @@ class BoltzmannDistributionPolicy(object):
         The form of processing depends on the type of the observation space, and the parameters
         whether scale is passed to the constructor; see observation_input for more information."""
         return self._processed_obs
-    
-    @property
-    def processed_obs_for_vf(self):
-        """tf.Tensor: processed observations, shape (m, ) + self.ob_space.shape.
-
-        The form of processing depends on the type of the observation space, and the parameters
-        whether scale is passed to the constructor; see observation_input for more information."""
-        return self._processed_obs_for_vf    
-
     
     """BDPL changes"""
     @property
@@ -258,11 +239,6 @@ class BoltzmannDistributionPolicy(object):
     def action_ph(self):
         """tf.Tensor: placeholder for actions, shape (self.n_batch, ) + self.ac_space.shape."""
         return self._action_ph
-
-    @property
-    def policy_proba(self):
-        """tf.Tensor: parameters of the probability distribution. Depends on pdtype."""
-        return self._policy_proba
 
     @staticmethod
     def _kwargs_check(feature_extraction, kwargs):
@@ -281,7 +257,6 @@ class BoltzmannDistributionPolicy(object):
         # (in that case the keywords arguments are passed explicitly)
         if feature_extraction == 'mlp' and len(kwargs) > 0:
             raise ValueError("Unknown keywords for policy: {}".format(kwargs))
-
 
 
 class FeedForwardBoltzmannDistributionPolicy(BoltzmannDistributionPolicy):
@@ -306,12 +281,8 @@ class FeedForwardBoltzmannDistributionPolicy(BoltzmannDistributionPolicy):
     :param cnn_extractor: (function (TensorFlow Tensor, ``**kwargs``): (TensorFlow Tensor)) the CNN feature extraction
     :param feature_extraction: (str) The feature extraction type ("cnn" or "mlp")
     :param kwargs: (dict) Extra keyword arguments for the nature CNN feature extraction
-    
-    :enable_obs_ph_for_vf: policy has two input as ac_candidates_nd, and all_observation_nd
-                but value function only need observation_m
-                so, define one more input for this. Enable based on algorithm
     """
-    def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch, enable_obs_ph_for_vf = False, reuse=False, layers=None, net_arch=None,
+    def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch, reuse=False, layers=None, net_arch=None,
                  act_fun=tf.tanh, cnn_extractor=nature_cnn, feature_extraction="cnn", **kwargs):
         super(FeedForwardBoltzmannDistributionPolicy, self).__init__(sess, ob_space, ac_space, n_env, n_steps, n_batch, reuse=reuse,
                                                 scale=(feature_extraction == "cnn"))
@@ -338,36 +309,27 @@ class FeedForwardBoltzmannDistributionPolicy(BoltzmannDistributionPolicy):
         Note, we cannot share variable between policy and value function,
         since they have different input dimension"""
         """"""
-        self.enable_obs_ph_for_vf = enable_obs_ph_for_vf
         #firstly, add action into model input
-        with tf.variable_scope("model", reuse=reuse):
-            with tf.variable_scope("policy_model", reuse=reuse):
-                if feature_extraction == "cnn":
-                    raise NotImplementedError
-                    # remark: previously vf and pi are force sharing weights here
-#                    pi_latent = cnn_extractor(processed_input, **kwargs)
-                else:
-                    processed_input = tf.concat([tf.layers.flatten(self.processed_obs),self.processed_acs], axis=-1)#(N,[D_obs])#note!!!not necessarily (N,D),since ob.space can be, e.g. (N,5,9), instead of (N,45,)
-                    pi_latent,_ = mlp_extractor(processed_input, net_arch, act_fun, not_constructing='vf')
-                self._policy_latent = linear(pi_latent, 'pi', 1)#policy model, a tensor
-                
-                self._proba_distribution = self.pdtype.proba_distribution_from_something(self._policy_latent[:,0], self.grouping_ph_mn)
-    
-            
-            if enable_obs_ph_for_vf == False:
-                vf_input = self.processed_obs
+        with tf.variable_scope("policy_model", reuse=reuse):
+            if feature_extraction == "cnn":
+                raise NotImplementedError
+#                pi_latent = cnn_extractor(processed_input, **kwargs)
             else:
-                vf_input = self.processed_obs_for_vf
+                processed_input = tf.concat([tf.layers.flatten(self.processed_obs),self.processed_acs], axis=-1)#(N,[D_obs])#note!!!not necessarily (N,D),since ob.space can be, e.g. (N,5,9), instead of (N,45,)
+                pi_latent,_ = mlp_extractor(processed_input, net_arch, act_fun)
+            self._policy_latent = linear(pi_latent, 'pi', 1)#policy model, a tensor
             
-            with tf.variable_scope("critic", reuse=reuse):
-                if feature_extraction == "cnn":
-                    vf_latent = cnn_extractor(vf_input, **kwargs)
-                    # remark: previously vf and pi are force sharing weights here
-                else:
-                    vf_latent,_ = mlp_extractor(tf.layers.flatten(vf_input), net_arch, act_fun, not_constructing='pi')
-                
-                self._value_fn = linear(vf_latent, 'vf', 1)#(batch_size,1)
-                #self.q_values = ??? ??NotImplemented              
+            self._proba_distribution = self.pdtype.proba_distribution_from_something(self._policy_latent[:,0], self.grouping_ph_mn)
+
+            
+        with tf.variable_scope("critic", reuse=reuse):
+            if feature_extraction == "cnn":
+                vf_latent = cnn_extractor(self.processed_obs, **kwargs)
+            else:
+                vf_latent,_ = mlp_extractor(tf.layers.flatten(self.processed_obs), net_arch, act_fun)
+            
+            self._value_fn = linear(vf_latent, 'vf', 1)#(batch_size,1)
+            #self.q_values = ??? ??NotImplemented              
             
         """
         In stable baseline, they firstly define and initialize 'probability' class here, 
@@ -386,8 +348,6 @@ class FeedForwardBoltzmannDistributionPolicy(BoltzmannDistributionPolicy):
         
     
     def step(self, obs, ac_candidates, state=None, mask=None, deterministic=False):
-        # obs: (1,obs_dims)
-        # ac_candidates: (n_ac_candidates,ac_dims)
         #feed action_ph,obs_ph,
         assert np.shape(obs)[0] == 1, "batch computation is only used for training, does not support batch here"
         if deterministic:
@@ -403,20 +363,9 @@ class FeedForwardBoltzmannDistributionPolicy(BoltzmannDistributionPolicy):
 #            td_map
             grouping = np.array([[1]*num_traj])
             
-            if self.enable_obs_ph_for_vf == False:
-                sample_a_idx, value, prob_n = self.sess.run([self.sample_a_idx,self.value_flat,self.prob_n], feed_dict={self.obs_ph:all_obs, self.action_ph:ac_candidates,self.grouping_ph_mn:grouping})
-            else:
-                sample_a_idx, value, prob_n = self.sess.run([self.sample_a_idx,self.value_flat,self.prob_n], feed_dict={self.obs_ph:all_obs, self.action_ph:ac_candidates,self.grouping_ph_mn:grouping,self.obs_ph_for_vf:obs})
-            
+            sample_a_idx, value, prob_n = self.sess.run([self.sample_a_idx,self.value_flat,self.prob_n], feed_dict={self.obs_ph:all_obs, self.action_ph:ac_candidates,self.grouping_ph_mn:grouping})
             return sample_a_idx, value, self.initial_state, prob_n
-
-    def proba_step(self, obs, ac_candidates, grouping_mn, state=None, mask=None):
-        tile_args = len(obs.shape)*[1]
-        num_traj = np.shape(ac_candidates)[0]
-        tile_args[0] = num_traj
-        all_obs = np.tile(obs,tile_args)
-        return self.sess.run(self.policy_proba, {self.obs_ph: all_obs, self.action_ph:ac_candidates, self.grouping_ph_mn: grouping_mn})
-    
+            
     @property
     def value_fn(self):
         """tf.Tensor: value estimate, of shape (self.n_batch, 1)"""
@@ -580,7 +529,7 @@ class BDPL(ActorCriticRLModel):
                     tf.summary.scalar('prob_n2:1', prob_n2[1])
                     tf.summary.scalar('prob_n2:2', prob_n2[2])
 
-                    self.params = tf_util.get_trainable_vars("model")
+                    self.params = tf_util.get_trainable_vars("policy_model") + tf_util.get_trainable_vars("critic") 
                     grads = tf.gradients(loss, self.params)
                     if self.max_grad_norm is not None:
                         grads, _ = tf.clip_by_global_norm(grads, self.max_grad_norm)

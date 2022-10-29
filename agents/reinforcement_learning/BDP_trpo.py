@@ -1,3 +1,14 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Thu Oct 20 10:52:45 2022
+start from copy past trpo_mpi.py
+
+remakrs:
+    
+
+@author: sry
+"""
 import time
 from contextlib import contextmanager
 from collections import deque
@@ -15,10 +26,12 @@ from stable_baselines.common.mpi_adam import MpiAdam
 from stable_baselines.common.cg import conjugate_gradient
 from stable_baselines.common.policies import ActorCriticPolicy
 from stable_baselines.a2c.utils import total_episode_reward_logger
-from stable_baselines.trpo_mpi.utils import traj_segment_generator, add_vtarg_and_adv, flatten_lists
+from utils_trpo import traj_segment_generator, add_vtarg_and_adv, flatten_lists
+
+from util import Process_batch_for_BDP_trpo
 
 
-class TRPO(ActorCriticRLModel):
+class TRPO_bdp(ActorCriticRLModel):
     """
     Trust Region Policy Optimization (https://arxiv.org/abs/1502.05477)
 
@@ -49,7 +62,7 @@ class TRPO(ActorCriticRLModel):
                  entcoeff=0.0, cg_damping=1e-2, vf_stepsize=3e-4, vf_iters=3, verbose=0, tensorboard_log=None,
                  _init_setup_model=True, policy_kwargs=None, full_tensorboard_log=False,
                  seed=None, n_cpu_tf_sess=1, model_dir=None):
-        super(TRPO, self).__init__(policy=policy, env=env, verbose=verbose, requires_vec_env=False,
+        super(TRPO_bdp, self).__init__(policy=policy, env=env, verbose=verbose, requires_vec_env=False,
                                    _init_setup_model=_init_setup_model, policy_kwargs=policy_kwargs,
                                    seed=seed, n_cpu_tf_sess=n_cpu_tf_sess)
 
@@ -114,9 +127,10 @@ class TRPO(ActorCriticRLModel):
         from stable_baselines.gail.adversary import TransitionClassifier
 
         with SetVerbosity(self.verbose):
-
-            assert issubclass(self.policy, ActorCriticPolicy), "Error: the input policy for the TRPO model must be " \
-                                                               "an instance of common.policies.ActorCriticPolicy."
+            
+            #remark: not any more
+#            assert issubclass(self.policy, ActorCriticPolicy), "Error: the input policy for the TRPO model must be " \
+#                                                               "an instance of common.policies.ActorCriticPolicy."
 
             self.nworkers = MPI.COMM_WORLD.Get_size()
             self.rank = MPI.COMM_WORLD.Get_rank()
@@ -133,20 +147,22 @@ class TRPO(ActorCriticRLModel):
                                                              entcoeff=self.adversary_entcoeff)
 
                 # Construct network for new policy
+                # remark: n_steps is set to 1. I guess it is a variable only related to lstm, but lstm is not yet implemented even in original trpo
                 self.policy_pi = self.policy(self.sess, self.observation_space, self.action_space, self.n_envs, 1,
-                                             None, reuse=False, **self.policy_kwargs)
+                                             None, enable_obs_ph_for_vf = True, reuse=False, **self.policy_kwargs)
 
                 # Network for old policy
+                # with 'oldpi' as variable scope, it won't list in var_list with get_trainable_vars("model")
                 with tf.variable_scope("oldpi", reuse=False):
                     old_policy = self.policy(self.sess, self.observation_space, self.action_space, self.n_envs, 1,
-                                             None, reuse=False, **self.policy_kwargs)
+                                             None, enable_obs_ph_for_vf = True, reuse=False, **self.policy_kwargs)
 
                 with tf.variable_scope("loss", reuse=False):
                     atarg = tf.placeholder(dtype=tf.float32, shape=[None])  # Target advantage function (if applicable)
                     ret = tf.placeholder(dtype=tf.float32, shape=[None])  # Empirical return
 
-                    observation = self.policy_pi.obs_ph
-                    action = self.policy_pi.pdtype.sample_placeholder([None])
+                    observation = self.policy_pi.obs_ph# shape (?,5,9)
+                    action = self.policy_pi.pdtype.sample_placeholder([None])# shape (?,d_action), if catagorical, it means (?,). here it is action_idx
 
                     kloldnew = old_policy.proba_distribution.kl(self.policy_pi.proba_distribution)
                     ent = self.policy_pi.proba_distribution.entropy()
@@ -154,11 +170,12 @@ class TRPO(ActorCriticRLModel):
                     meanent = tf.reduce_mean(ent)
                     entbonus = self.entcoeff * meanent
 
-                    vferr = tf.reduce_mean(tf.square(self.policy_pi.value_flat - ret))
+                    vferr = tf.reduce_mean(tf.square(self.policy_pi.value_flat - ret))#value_flat: (batch_size,)
 
                     # advantage * pnew / pold
-                    ratio = tf.exp(self.policy_pi.proba_distribution.logp(action) -
-                                   old_policy.proba_distribution.logp(action))
+                    # remark: the below line should use one_hot instead of action
+                    ratio = tf.exp(self.policy_pi.proba_distribution.logp(action,None) -
+                                   old_policy.proba_distribution.logp(action,None))
                     surrgain = tf.reduce_mean(ratio * atarg)
 
                     optimgain = surrgain + entbonus
@@ -186,6 +203,7 @@ class TRPO(ActorCriticRLModel):
                     gvp = tf.add_n([tf.reduce_sum(grad * tangent)
                                     for (grad, tangent) in zipsame(klgrads, tangents)])  # pylint: disable=E1111
                     # Fisher vector products
+                    # Remarks: compute gradient of gradient here
                     fvp = tf_util.flatgrad(gvp, var_list)
 
                     tf.summary.scalar('entropy_loss', meanent)
@@ -193,15 +211,51 @@ class TRPO(ActorCriticRLModel):
                     tf.summary.scalar('value_function_loss', surrgain)
                     tf.summary.scalar('approximate_kullback-leibler', meankl)
                     tf.summary.scalar('loss', optimgain + meankl + entbonus + surrgain + meanent)
-
+                    tf.summary.scalar('ratio_nan', tf.reduce_sum(tf.cast(tf.is_nan(ratio),tf.int32)))
+                    
+                    # things need to feed in:
+                    # ratio feed trace:  (grouping_mn,goodness_n) -> logits -> proba_distribution
+                    #                      grouping_mn, processed_obs, processed_a -> goodness_n
+                    # need to feed: grouping,all_obs,all_a, for both old policy and new policy
+                    # then, feed 'idx' into action, (feed real action (see ac_candidates) into action_ph )              
+                    compute_losses_input_ph = [observation, old_policy.obs_ph, self.policy_pi.action_ph, old_policy.action_ph, self.policy_pi.grouping_ph_mn, old_policy.grouping_ph_mn, action, atarg]
+                    # feed trace: (grouping_mn, goodness_n) -> logits -> proba_distribution 
+                    #      where: grouping_mn, processed_obs, processed_a -> goodness_n
+                    # do it for both old policy and new
+                    #       then: action_idx, proba_distribution -> kl 
+                    #               tangent, kl) -> gvp -> fvp
+                    compute_fvp_input_ph = [flat_tangent, observation, old_policy.obs_ph, self.policy_pi.action_ph, old_policy.action_ph, self.policy_pi.grouping_ph_mn, old_policy.grouping_ph_mn, action, atarg]
+                    """
+                    # the logits is (m,n), where n is batch_size, m is the dim after grouping
+                    # action should be (m,) and int since it is action_idx, then ratio should be (m,)
+                    # then atarg should also be (m,) to be match with ratio
+                    # observation and action should be all duplicated, and is (n,d)
+                    # m dims arguments need not change compared with original code when feeding
+                    # n > m
+                    """
+                    # feed trace: processed_obs -> vf_latent,
+                    assert self.policy_pi.enable_obs_ph_for_vf is True, "need enable_obs_ph_for_vf"
+                    compute_vflossandgrad_input_ph = [self.policy_pi.obs_ph_for_vf, old_policy.obs_ph_for_vf, ret]
+                    
+                    """
+                    # Here, lets first try non-diplicated version
+                    # so, here observation is just (m,)
+                    # ret is also (m,)
+                    # we cannot share same ph with the observation above, need enable_obs_ph_for_vf
+                    """
+                    
                     self.assign_old_eq_new = \
                         tf_util.function([], [], updates=[tf.assign(oldv, newv) for (oldv, newv) in
                                                           zipsame(tf_util.get_globals_vars("oldpi"),
                                                                   tf_util.get_globals_vars("model"))])
-                    self.compute_losses = tf_util.function([observation, old_policy.obs_ph, action, atarg], losses)
-                    self.compute_fvp = tf_util.function([flat_tangent, observation, old_policy.obs_ph, action, atarg],
-                                                        fvp)
-                    self.compute_vflossandgrad = tf_util.function([observation, old_policy.obs_ph, ret],
+#                    self.compute_losses = tf_util.function([observation, old_policy.obs_ph, action, atarg], losses)
+#                    self.compute_fvp = tf_util.function([flat_tangent, observation, old_policy.obs_ph, action, atarg],
+#                                                        fvp)
+#                    self.compute_vflossandgrad = tf_util.function([observation, old_policy.obs_ph, ret],
+#                                                                  tf_util.flatgrad(vferr, vf_var_list))
+                    self.compute_losses = tf_util.function(compute_losses_input_ph, losses)
+                    self.compute_fvp = tf_util.function(compute_fvp_input_ph,fvp)
+                    self.compute_vflossandgrad = tf_util.function(compute_vflossandgrad_input_ph,
                                                                   tf_util.flatgrad(vferr, vf_var_list))
 
                     @contextmanager
@@ -263,9 +317,26 @@ class TRPO(ActorCriticRLModel):
                     self.params.extend(self.reward_giver.get_trainable_variables())
 
                 self.summary = tf.summary.merge_all()
-
+                
+                # things need to feed in:
+                # proba_distribution feed trace:  (grouping_mn,goodness_n) -> logits -> proba_distribution
+                #                      grouping_mn, processed_obs, processed_a -> goodness_n
+                # need to feed: grouping,all_obs,all_a, for both old policy and new policy
+                # then proba_distribution x 2, action_idx, atarg -> optimgain
+                """
+                # the logits is (m,n), where n is batch_size, m is the dim after grouping
+                # action should be (m,) and int since it is action_idx, then ratio should be (m,)
+                # then atarg should also be (m,) to be match with ratio
+                # observation and action should be all duplicated, and is (n,d)
+                # m dims arguments need not change compared with original code when feeding
+                # n > m
+                # also need enable_obs_ph_for_vf, obs_ph_for_vf is (m,d)
+                # ret is (m,)
+                """
+                compute_lossandgrad_input = [observation, old_policy.obs_ph, self.policy_pi.action_ph, old_policy.action_ph, self.policy_pi.grouping_ph_mn, old_policy.grouping_ph_mn, action, atarg, self.policy_pi.obs_ph_for_vf, old_policy.obs_ph_for_vf,  ret]
+                
                 self.compute_lossandgrad = \
-                    tf_util.function([observation, old_policy.obs_ph, action, atarg, ret],
+                    tf_util.function(compute_lossandgrad_input,
                                      [self.summary, tf_util.flatgrad(optimgain, var_list)] + losses)
 
     def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="TRPO",
@@ -333,9 +404,9 @@ class TRPO(ActorCriticRLModel):
                         if not seg.get('continue_training', True):  # pytype: disable=attribute-error
                             break
 
-                        add_vtarg_and_adv(seg, self.gamma, self.lam)
+                        add_vtarg_and_adv(seg, self.gamma, self.lam) # careful, this line will change the content of seg!!!!!
                         # ob, ac, atarg, ret, td1ret = map(np.concatenate, (obs, acs, atargs, rets, td1rets))
-                        observation, action = seg["observations"], seg["actions"]
+                        observation, action = seg["observations"], seg["actions"]#here observation is not all_observation
                         atarg, tdlamret = seg["adv"], seg["tdlamret"]
 
 
@@ -350,10 +421,21 @@ class TRPO(ActorCriticRLModel):
                                                         seg["dones"].reshape((self.n_envs, -1)),
                                                         writer, self.num_timesteps)
 
-                        args = seg["observations"], seg["observations"], seg["actions"], atarg
+#                        args = seg["observations"], seg["observations"], seg["actions"], atarg
+                        # remarks: add more args here
+                        #process for bdp
+                        roll_out = seg["observations"], seg["rewards"], seg["vpred"], seg["a_label"], seg["all_a"], seg["num_a"]
+                        all_obs_nd,all_rew_n,all_value_n, a_label_m, all_a_nd, num_a_m, a_label_n, grouping_mn,a_label_idx_n = Process_batch_for_BDP_trpo(roll_out)
+                        args = all_obs_nd,all_obs_nd,all_a_nd,all_a_nd,grouping_mn,grouping_mn,a_label_idx_n,atarg,seg["observations"], seg["observations"]
+                        
+                        
+                        args_no_vf = all_obs_nd,all_obs_nd,all_a_nd,all_a_nd,grouping_mn,grouping_mn,a_label_idx_n,atarg
                         # Subsampling: see p40-42 of John Schulman thesis
                         # http://joschu.net/docs/thesis.pdf
-                        fvpargs = [arr[::1] for arr in args]
+                        # TODO: the down sampling cannot be performed like that, since the n_dims is complecated
+                        # and the "grouping" variable will be wrong
+#                        fvpargs = [arr[::5] for arr in args_no_vf]# mystery number
+                        fvpargs = args_no_vf
 
                         self.assign_old_eq_new(sess=self.sess)
 
@@ -396,7 +478,7 @@ class TRPO(ActorCriticRLModel):
                                 thnew = thbefore + fullstep * stepsize
                                 self.set_from_flat(thnew)
                                 mean_losses = surr, kl_loss, *_ = self.allmean(
-                                    np.array(self.compute_losses(*args, sess=self.sess)))
+                                    np.array(self.compute_losses(*args_no_vf, sess=self.sess)))
                                 improve = surr - surrbefore
                                 logger.log("Expected: %.3f Actual: %.3f" % (expectedimprove, improve))
                                 if not np.isfinite(mean_losses).all():

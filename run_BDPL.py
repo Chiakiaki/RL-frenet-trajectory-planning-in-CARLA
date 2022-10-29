@@ -30,6 +30,7 @@ from stable_baselines.common.policies import BasePolicy, nature_cnn, register_po
 
 #bdpl
 from agents.reinforcement_learning.BDPL import BDPL, FeedForwardBoltzmannDistributionPolicy
+from agents.reinforcement_learning.BDP_trpo import TRPO_bdp
 
 
 from config import cfg, log_config_to_file, cfg_from_list, cfg_from_yaml_file
@@ -104,6 +105,8 @@ if __name__ == '__main__':
         policy = {'MLP': DQNMlpPolicy, 'CNN': DQNCnnPolicy}
     elif cfg.POLICY.NAME == 'BDP':
         policy = {'MLP': FeedForwardBoltzmannDistributionPolicy}
+    elif cfg.POLICY.NAME == 'TRPO_BDP':
+        policy = {'MLP': FeedForwardBoltzmannDistributionPolicy}
     else:
         policy = {'MLP': CommonMlpPolicy, 'LSTM': CommonMlpLstmPolicy, 'CNN': CommonCnnPolicy}
 
@@ -157,6 +160,8 @@ if __name__ == '__main__':
             model = TRPO(policy[cfg.POLICY.NET], env, verbose=1, model_dir=save_path,tensorboard_log=save_path, policy_kwargs={'cnn_extractor': eval(cfg.POLICY.CNN_EXTRACTOR)})#no learning_rate
         elif cfg.POLICY.NAME =='A2C':
             model = A2C(policy[cfg.POLICY.NET], env, verbose=1, learning_rate = args.learning_rate, model_dir=save_path,tensorboard_log=save_path, policy_kwargs={'cnn_extractor': eval(cfg.POLICY.CNN_EXTRACTOR)})
+        elif cfg.POLICY.NAME == 'TRPO_BDP':
+            model = TRPO_bdp(policy[cfg.POLICY.NET], env, verbose=1, model_dir=save_path,tensorboard_log=save_path, policy_kwargs={'feature_extraction': 'mlp','cnn_extractor': eval(cfg.POLICY.CNN_EXTRACTOR)})#no learning_rate
         elif cfg.POLICY.NAME == 'BDP':
             model = BDPL(policy[cfg.POLICY.NET], env, verbose = 1, learning_rate = args.learning_rate, model_dir=save_path,tensorboard_log=save_path, policy_kwargs={'feature_extraction': 'mlp','cnn_extractor': eval(cfg.POLICY.CNN_EXTRACTOR)})
         else:
