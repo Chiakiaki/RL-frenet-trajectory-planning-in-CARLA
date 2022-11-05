@@ -138,6 +138,10 @@ class CarlaGymEnv(gym.Env):
             action_low = np.array([-1.]*(self.num_traj))#-1 because we use 'yaw_change' for action feature 
             action_high = np.array([1.]*(self.num_traj))
             self.action_space = gym.spaces.Box(low = action_low, high=action_high, shape=([self.num_traj]), dtype=np.float32)
+        elif self.mode == 'combined':
+            action_low = np.array([-1.]*(self.T_ac_candidates*2 + self.num_traj))#-1 because we use 'yaw_change' for action feature 
+            action_high = np.array([1.]*(self.T_ac_candidates*2 + self.num_traj))
+            self.action_space = gym.spaces.Box(low = action_low, high=action_high, shape=([self.T_ac_candidates*2 + self.num_traj]), dtype=np.float32)
         elif self.mode == 'continuous_catagorical':
             """original action space of env_v1"""
             action_low = np.array([-1])
@@ -567,6 +571,10 @@ class CarlaGymEnv(gym.Env):
 #                print('e')
             
             return ac2,len(self.bdpl_path_list)
+        elif self.mode == 'combined':
+            ac2 = process_path_list_as_acs(self.bdpl_path_list_with_offroad,traj_action_params1)
+            ac2 = np.concatenate([ac2,np.eye(3)],axis = 1)
+            return ac2,len(self.bdpl_path_list)
         elif self.mode == 'continuous_catagorical':
             return np.array([[0.],[-1.],[1.]]),3#must be correctly set, is related to lane-change reward
             #note bdp does not implemented continuous catagorical
@@ -588,7 +596,7 @@ class CarlaGymEnv(gym.Env):
         in Boltzmann Distribution Policy Learning, the env.step need not return all infomation to candidate actions,
         they just need to return some feature. The model just do 'select', not create.
         """
-        if self.mode == 'catagorical' or self.mode == 'bdp' or self.mode == 'bdpCatagorical':
+        if self.mode == 'catagorical' or self.mode == 'bdp' or self.mode == 'bdpCatagorical' or self.mode == 'combined':
             assert type(action) is int or np.int32 or np.int64, "error action %d is not type int" % action
             fpath = self.bdpl_path_list[action]
             self.lanechange = self.tmp_lanechange[action]
