@@ -65,6 +65,7 @@ class CarlaGymEnv(gym.Env):
         mode: one  of bdp, ddpg, catagorical
         """
         self.mode = kwargs['mode']
+        self.is_finish_traj = kwargs.pop('is_finish_traj',1)
         self.num_traj = 3
         #TODO: num_traj config
         
@@ -734,6 +735,9 @@ class CarlaGymEnv(gym.Env):
                 distance_traveled = self.max_s + distance_traveled
             if distance_traveled >= self.track_length:
                 track_finished = True
+                
+            if self.is_finish_traj != 1:
+                break
 
         """
                 *********************************************************************************************************************

@@ -58,6 +58,7 @@ def parse_args_cfgs():
     parser.add_argument('--learning_rate', type=float, metavar='lr', default='7e-4', help='learning_rate (default: 7e-4)')
 #    parser.add_argument('--pg_lr_multiplyer', type=int, default=1, help='pg_loss learning rate multiplyer (currently deprecated)')
     parser.add_argument('--planner_mode', type=str, default='bdp', help='specify the mode of planner, can be bdp,. (default: bdp)')
+    parser.add_argument('--is_finish_traj', type=int, default=1, help='whether in one env step, the car need to finish a whole trajectory. 1 means true. (default: 1)')
 
     args = parser.parse_args()
 
@@ -87,7 +88,8 @@ def parse_args_cfgs():
 if __name__ == '__main__':
     args, cfg = parse_args_cfgs()
     print('Env is starting')
-    env = gym.make(args.env,mode = args.planner_mode)
+    print(args.is_finish_traj)
+    env = gym.make(args.env, mode = args.planner_mode, is_finish_traj = args.is_finish_traj)
     if args.play_mode:
         env.enable_auto_render()
     env.begin_modules(args)
