@@ -737,6 +737,7 @@ class CarlaGymEnv(gym.Env):
                 track_finished = True
                 
             if self.is_finish_traj != 1:
+                # in such mode, each env step only do the step of planned trajectory
                 break
 
         """
@@ -769,13 +770,16 @@ class CarlaGymEnv(gym.Env):
 
         spd_change_percentage = (last_speed - init_speed) / init_speed if init_speed != 0 else -1
         r_laneChange = 0
-
-        if self.lanechange and spd_change_percentage < self.min_speed_gain:
-            r_laneChange = -1 * r_speed * self.lane_change_penalty  # <= 0
-
-        elif self.lanechange:
-            r_speed *= self.lane_change_reward
-
+        
+        if self.is_finish_traj == 1:
+            #these 'lane_change' reward does not make sense in one_step mode
+            if self.lanechange and spd_change_percentage < self.min_speed_gain:
+                r_laneChange = -1 * r_speed * self.lane_change_penalty  # <= 0
+    
+            elif self.lanechange:
+                r_speed *= self.lane_change_reward
+            
+        
         positives = r_speed
         negatives = r_laneChange
         reward = positives + negatives  # r_speed * (1 - lane_change_penalty) <= reward <= r_speed * lane_change_reward

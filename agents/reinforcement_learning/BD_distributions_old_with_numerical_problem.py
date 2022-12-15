@@ -6,8 +6,9 @@ Created on Fri Oct 21 15:16:45 2022
 @author: sry
 
     current limitation:
-        I'm not sure what implementation will yield gradient with good precision. E.g. will log(exp(x)) loss precision
-        in gradient computation.
+        lets say the logits is (-30000,0), this will yield
+        numerical issue if we do log(exp(logits)), which will yield
+        -inf,0
 
 """
 import numpy as np
@@ -15,7 +16,7 @@ import tensorflow as tf
 from tensorflow.python.ops import math_ops
 from gym import spaces
 
-#from stable_baselines.a2c.utils import linear
+from stable_baselines.a2c.utils import linear
 from stable_baselines.common.distributions import ProbabilityDistributionType,ProbabilityDistribution,CategoricalProbabilityDistribution
 
 
@@ -132,6 +133,10 @@ class BoltzmannDistributionV1(CategoricalProbabilityDistribution):
             labels=tf.stop_gradient(one_hot_actions))
         """
         
+        
+        
+        
+        
     def logp(self, x, one_hot_input_flag):
         """
         returns the of the log likelihood
@@ -158,11 +163,15 @@ class BoltzmannDistributionV1(CategoricalProbabilityDistribution):
         z_0 = tf.reduce_sum(exp_a_0, axis=-1, keepdims=True)
         z_1 = tf.reduce_sum(exp_a_1, axis=-1, keepdims=True)
         p_0 = exp_a_0 / z_0
-        #z_0 and z_1  (the partition) is correct when has -inf
-        #a_0 - a_1 will has nan on not interested position
-        mul_no_nan = tf.math.multiply_no_nan(a_0 - tf.log(z_0) - a_1 + tf.log(z_1), p_0)
         
-        return tf.reduce_sum(mul_no_nan, axis=-1)
+        #z_0 and z_1  (the partition) is correct when has -inf
+        #a_0 - a_1 will has nan, the correct value is just 0
+        exp_a_0_ = exp_a_0 + 1 - self.grouping_mn
+        exp_a_1_ = exp_a_1 + 1 - self.grouping_mn
+        a_0_ = tf.log(exp_a_0_)
+        a_1_ = tf.log(exp_a_1_)
+        
+        return tf.reduce_sum(p_0 * (a_0_ - tf.log(z_0) - a_1_ + tf.log(z_1)), axis=-1)
 
         
     def entropy(self):
@@ -173,10 +182,15 @@ class BoltzmannDistributionV1(CategoricalProbabilityDistribution):
         exp_a_0 = tf.exp(a_0)
         z_0 = tf.reduce_sum(exp_a_0, axis=-1, keepdims=True)
         p_0 = exp_a_0 / z_0 
-        # caution: 0 * -inf still yield Nan, which still may cause problem
-        mul_no_nan = tf.math.multiply_no_nan(tf.log(z_0) - a_0, p_0)
+        # caution: when model is well trained, the p_0,exp_a_0 can has zero
+        # thus, the log(exp_a_0) may have problem. 
+        # Here we wish log(0) = -inf, luckily tensorflow 1.15 has this
+        # However, 0 * -inf still yield Nan, which still may cause problem
         
-        return tf.reduce_sum(mul_no_nan, axis=-1)
+        exp_a_0_ = exp_a_0 + 1 - self.grouping_mn
+        a_0_ = tf.log(exp_a_0_)
+        
+        return tf.reduce_sum(p_0 * (tf.log(z_0) - a_0_), axis=-1)
     
     
     """
@@ -188,8 +202,8 @@ class BoltzmannDistributionV1(CategoricalProbabilityDistribution):
     import tensorflow as tf
     import numpy as np
     goodness_n = np.array([-6001.,-6002.,-6003.,-6004.,-6005])
-    # goodness_n = np.array([-1.,-2.,-3.,-4.,-5])
-    goodness_n = np.array([1.,2.,3.,4.,5])
+    goodness_n = np.array([-1.,-2.,-3.,-4.,-5])
+    # goodness_n = np.array([1.,2.,3.,4.,5])
     goodness_n2 = np.array([6001.,6002.,6003.,6004.,6005])
     goodness_n = tf.constant(goodness_n)
     #
@@ -213,7 +227,11 @@ class BoltzmannDistributionV1(CategoricalProbabilityDistribution):
     z_1 = tf.reduce_sum(exp_a_1, axis=-1, keepdims=True)
     p_0 = exp_a_0 / z_0
     logz0 = tf.log(z_0)
-
+    exp_a_0_ = exp_a_0 + 1 - grouping_mn
+    exp_a_1_ = exp_a_1 + 1 - grouping_mn
+    a_0_ = tf.log(exp_a_0_)
+    a_1_ = tf.log(exp_a_1_)
+    a0_minus_a1 = a_0_ - a_1_
     kl = pd.kl(pd2)
     
     # entropy
@@ -226,7 +244,7 @@ class BoltzmannDistributionV1(CategoricalProbabilityDistribution):
 
     
     with tf.Session() as sess:
-        logits,logits2,a0,a1,z0,p0,logz0,kl_value,ent = sess.run([pd.logits,pd2.logits,a_0,a_1,z_0,p_0,logz0,kl,ent])
+        logits,logits2,a0,a1,z0,p0,logz0,a0_minus_a1,kl_value,ent = sess.run([pd.logits,pd2.logits,a_0,a_1,z_0,p_0,logz0,a0_minus_a1,kl,ent])
         
     with tf.Session() as sess:
         logp = sess.run(logp)
@@ -243,7 +261,7 @@ class BoltzmannDistributionV1(CategoricalProbabilityDistribution):
     goodness_n = np.array([-6001.,-6002.,-6003.,-6004.,-6005])
     goodness_n = np.array([-10000.,20000.,-3.,-40000.,50000])
     # goodness_n = np.array([1.,2.,3.,4.,5])
-    goodness_n2 = np.array([6001.,-6002.,6003.,6000.,96000])
+    goodness_n2 = np.array([6001.,-6002.,6003.,6004.,-6005])
     goodness_n = tf.constant(goodness_n)
     #
     # Then grouping_mn is like follow (watch the differences for s0,s1,s2) 
@@ -266,7 +284,11 @@ class BoltzmannDistributionV1(CategoricalProbabilityDistribution):
     z_1 = tf.reduce_sum(exp_a_1, axis=-1, keepdims=True)
     p_0 = exp_a_0 / z_0
     logz0 = tf.log(z_0)
-
+    exp_a_0_ = exp_a_0 + 1 - grouping_mn
+    exp_a_1_ = exp_a_1 + 1 - grouping_mn
+    a_0_ = tf.log(exp_a_0_)
+    a_1_ = tf.log(exp_a_1_)
+    a0_minus_a1 = a_0_ - a_1_
     kl = pd.kl(pd2)
     
     # entropy
@@ -279,7 +301,7 @@ class BoltzmannDistributionV1(CategoricalProbabilityDistribution):
 
     
     with tf.Session() as sess:
-        logits,logits2,a0,a1,z0,p0,logz0,kl_value,ent = sess.run([pd.logits,pd2.logits,a_0,a_1,z_0,p_0,logz0,kl,ent])
+        logits,logits2,a0,a1,z0,p0,logz0,a0_minus_a1,kl_value,ent = sess.run([pd.logits,pd2.logits,a_0,a_1,z_0,p_0,logz0,a0_minus_a1,kl,ent])
         
     with tf.Session() as sess:
         logp = sess.run(logp)
