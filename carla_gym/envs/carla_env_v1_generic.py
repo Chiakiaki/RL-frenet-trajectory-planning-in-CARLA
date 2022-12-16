@@ -758,32 +758,46 @@ class CarlaGymEnv(gym.Env):
 
 
         if self.verbosity == 3: print(self.state)
+        
+        """
+                *********************************************************************************************************************
+                *********************************************** RL Observation for one_step using lidar *********************
+                *********************************************************************************************************************
+        """
+        
+        
+        
+        
         """
                 **********************************************************************************************************************
                 ********************************************* RL Reward Function *****************************************************
                 **********************************************************************************************************************
         """
-
-        e_speed = abs(self.targetSpeed - last_speed)
-        r_speed = self.w_r_speed * np.exp(-e_speed ** 2 / self.maxSpeed * self.w_speed)  # 0<= r_speed <= self.w_r_speed
-        #  first two path speed change increases regardless so we penalize it differently
-
-        spd_change_percentage = (last_speed - init_speed) / init_speed if init_speed != 0 else -1
-        r_laneChange = 0
+        if self.is_finish_traj == 1:#these 'lane_change' reward does not make sense in one_step mode
+            e_speed = abs(self.targetSpeed - last_speed)
+            r_speed = self.w_r_speed * np.exp(-e_speed ** 2 / self.maxSpeed * self.w_speed)  # 0<= r_speed <= self.w_r_speed
+            #  first two path speed change increases regardless so we penalize it differently
+    
+            spd_change_percentage = (last_speed - init_speed) / init_speed if init_speed != 0 else -1
+            r_laneChange = 0
         
-        if self.is_finish_traj == 1:
-            #these 'lane_change' reward does not make sense in one_step mode
             if self.lanechange and spd_change_percentage < self.min_speed_gain:
                 r_laneChange = -1 * r_speed * self.lane_change_penalty  # <= 0
     
             elif self.lanechange:
                 r_speed *= self.lane_change_reward
-            
-        
-        positives = r_speed
-        negatives = r_laneChange
-        reward = positives + negatives  # r_speed * (1 - lane_change_penalty) <= reward <= r_speed * lane_change_reward
-        # print(self.n_step, self.eps_rew)
+                
+            positives = r_speed
+            negatives = r_laneChange
+            reward = positives + negatives  # r_speed * (1 - lane_change_penalty) <= reward <= r_speed * lane_change_reward
+            # print(self.n_step, self.eps_rew)
+                
+        else:
+            # only speed reward here
+            e_speed = abs(self.targetSpeed - last_speed)
+            r_speed = self.w_r_speed * np.exp(-e_speed ** 2 / self.maxSpeed * self.w_speed)  # 0<= r_speed <= self.w_r_speed
+            #  first two path speed change increases regardless so we penalize it differently
+            reward = r_speed
 
         """
                 **********************************************************************************************************************
@@ -812,8 +826,8 @@ class CarlaGymEnv(gym.Env):
             if self.verbosity: print('REWARD'.ljust(15), '{:+8.6f}'.format(reward))
             return self.state, reward, done, {'reserved': 0}
 
-        elif off_the_road:
-            # print('Collision happened!')
+        elif off_the_road and self.is_finish_traj: #does not consider off road when doing one_step
+            # print('off road happened!')
             reward = self.off_the_road_penalty
             # done = True
             self.eps_rew += reward
@@ -886,6 +900,7 @@ class CarlaGymEnv(gym.Env):
         if self.global_route is None:
             self.global_route = np.empty((0, 3))
             distance = 1
+            
             for i in range(1520):
                 wp = self.world_module.town_map.get_waypoint(carla.Location(x=406, y=-100, z=0.1),
                                                              project_to_road=True).next(distance=distance)[0]
