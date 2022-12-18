@@ -70,8 +70,6 @@ qsub ~/RL-frenet-trajectory-planning-in-CARLA/bash_bdp_7e3.sh
 qsub ~/RL-frenet-trajectory-planning-in-CARLA/bash_bdp_original.sh
 
 # collecting result ===================================================================
-scp -r p28367rs@csf3.itservices.manchester.ac.uk:~/RL-frenet-trajectory-planning-in-CARLA/logs/agent_1111 ~/RL-frenet-trajectory-planning-in-CARLA/logs/agent_21111_csf3
-scp -r p28367rs@csf3.itservices.manchester.ac.uk:~/RL-frenet-trajectory-planning-in-CARLA/logs/agent_11110 ~/RL-frenet-trajectory-planning-in-CARLA/logs/agent_211110_csf3
 
 scp -r p28367rs@csf3.itservices.manchester.ac.uk:~/RL-frenet-trajectory-planning-in-CARLA/logs ~/RL-frenet-trajectory-planning-in-CARLA/logs/csf3
 
