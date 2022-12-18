@@ -66,10 +66,8 @@ class CarlaGymEnv(gym.Env):
         """
         self.mode = kwargs['mode']
         self.is_finish_traj = kwargs.pop('is_finish_traj',1)
-        self.num_traj = kwargs.pop('num_traj',3)
-        assert self.num_traj % 3 == 0, "currently need num_traj as integer time of 3"
-        
-
+        self.num_traj = 3
+        #TODO: num_traj config
         
         
         self.__version__ = "9.9.2"
@@ -521,55 +519,31 @@ class CarlaGymEnv(gym.Env):
         #TODO: set off the road
         off_the_road = False
         """
-        def cal_path_list_with_off_road(self,ego_state, Vf_n = -1, Tf = 5):
+        def cal_path_list_with_off_road(self,ego_state):
             bdpl_path_list = []
-            path1, lanechange1, off_the_road1 = self.motionPlanner.run_step_single_path_without_update_self_path_with_off_road(ego_state, self.f_idx, df_n=0, Tf=Tf,
-                                                                             Vf_n=Vf_n)#original code    
-            path2, lanechange2, off_the_road2 = self.motionPlanner.run_step_single_path_without_update_self_path_with_off_road(ego_state, self.f_idx, df_n=-1, Tf=Tf,
-                                                                             Vf_n=Vf_n)#original code
-            path3, lanechange3, off_the_road3 = self.motionPlanner.run_step_single_path_without_update_self_path_with_off_road(ego_state, self.f_idx, df_n=1, Tf=Tf,
-                                                                             Vf_n=Vf_n)#original code
+            path1, lanechange1, off_the_road1 = self.motionPlanner.run_step_single_path_without_update_self_path_with_off_road(ego_state, self.f_idx, df_n=0, Tf=5,
+                                                                             Vf_n=-1)#original code    
+            path2, lanechange2, off_the_road2 = self.motionPlanner.run_step_single_path_without_update_self_path_with_off_road(ego_state, self.f_idx, df_n=-1, Tf=5,
+                                                                             Vf_n=-1)#original code
+            path3, lanechange3, off_the_road3 = self.motionPlanner.run_step_single_path_without_update_self_path_with_off_road(ego_state, self.f_idx, df_n=1, Tf=5,
+                                                                             Vf_n=-1)#original code
             bdpl_path_list = [path1,path2,path3]
             return bdpl_path_list
         
-        def cal_path_list_without_off_road(self,ego_state, Vf_n = -1, Tf = 5):
-            # Will correct off road lanechange to go straight. This is the original logic.
-            bdpl_path_list = []
-            path1, lanechange1, off_the_road1 = self.motionPlanner.run_step_single_path_without_update_self_path(ego_state, self.f_idx, df_n=0, Tf=Tf,
-                                                                             Vf_n=Vf_n)#original code    
-            path2, lanechange2, off_the_road2 = self.motionPlanner.run_step_single_path_without_update_self_path(ego_state, self.f_idx, df_n=-1, Tf=Tf,
-                                                                             Vf_n=Vf_n)#original code
-            path3, lanechange3, off_the_road3 = self.motionPlanner.run_step_single_path_without_update_self_path(ego_state, self.f_idx, df_n=1, Tf=Tf,
-                                                                             Vf_n=Vf_n)#original code
-            bdpl_path_list = [path1,path2,path3]
-            tmp_lanechange = [lanechange1,lanechange2,lanechange3]
-            tmp_off_the_road = [off_the_road1,off_the_road2,off_the_road3]
-            return bdpl_path_list, tmp_lanechange, tmp_off_the_road
         
-        if self.num_traj == 3:
-            Vf_n_list = [-1]
-            Tf_list = [5]
-        elif self.num_traj == 9:
-            Vf_n_list = [-2,-1,0]
-            Tf_list = [4.2,5,5.8]
-        elif self.num_traj == 15:
-            Vf_n_list = [-3,-2,-1,0,1]
-            Tf_list = [3.2,4.1,5,5.9,7]
-        else:
-            raise NotImplementedError #do it yourself, it is easy
         
         self.bdpl_path_list = []
-        self.tmp_lanechange = []
-        self.tmp_off_the_road = []
-        self.bdpl_path_list_with_offroad = []
+        path1, lanechange1, off_the_road1 = self.motionPlanner.run_step_single_path_without_update_self_path(ego_state, self.f_idx, df_n=0, Tf=5,
+                                                                         Vf_n=-1)#original code    
+        path2, lanechange2, off_the_road2 = self.motionPlanner.run_step_single_path_without_update_self_path(ego_state, self.f_idx, df_n=-1, Tf=5,
+                                                                         Vf_n=-1)#original code
+        path3, lanechange3, off_the_road3 = self.motionPlanner.run_step_single_path_without_update_self_path(ego_state, self.f_idx, df_n=1, Tf=5,
+                                                                         Vf_n=-1)#original code
+        self.bdpl_path_list = [path1,path2,path3]
+        self.tmp_lanechange = [lanechange1,lanechange2,lanechange3]
+        self.tmp_off_the_road = [off_the_road1,off_the_road2,off_the_road3]
         
-        for Tf in Tf_list:
-            tmp_bdpl_path_list, tmp_tmp_lanechange, tmp_tmp_off_the_road = cal_path_list_without_off_road(self,ego_state,Tf = Tf)
-            tmp_bdpl_path_list_with_offroad = cal_path_list_with_off_road(self,ego_state,Tf = Tf)
-            self.bdpl_path_list += tmp_bdpl_path_list
-            self.tmp_lanechange += tmp_tmp_lanechange
-            self.tmp_off_the_road += tmp_tmp_off_the_road
-            self.bdpl_path_list_with_offroad += tmp_bdpl_path_list_with_offroad
+        self.bdpl_path_list_with_offroad = cal_path_list_with_off_road(self,ego_state)
         
         
         #save some parames
@@ -677,6 +651,7 @@ class CarlaGymEnv(gym.Env):
             off_the_road = self.tmp_off_the_road[action]
         else:
             raise NotImplementedError
+        self.bdpl_path_list = None#erase
         self.motionPlanner.update_self_path(fpath)
         
         
@@ -726,27 +701,7 @@ class CarlaGymEnv(gym.Env):
                     *********************************************** Draw Waypoints *******************************************************
                     **********************************************************************************************************************
             """
-            self.world_module.points_to_draw={}
-            def add_draw_path(fpath,name_prefix='',color='COLOR_ALUMINIUM_0'):
-                for i in range(len(fpath.t)):
-                    self.world_module.points_to_draw[name_prefix+'path wp {}'.format(i)] = [
-                        carla.Location(x=fpath.x[i], y=fpath.y[i]),
-                        color]
-            if self.world_module.args.play_mode != 0:
-                if self.bdpl_path_list is not None:
-                    for (j,i) in enumerate(self.bdpl_path_list_with_offroad):
-                        add_draw_path(i,'path list {}'.format(j),color='COLOR_ALUMINIUM_0')
-                add_draw_path(fpath,'',color='COLOR_ORANGE_0')
-                    
-                    
-                    
-                self.world_module.points_to_draw['ego'] = [self.ego.get_location(), 'COLOR_SCARLET_RED_0']
-                self.world_module.points_to_draw['waypoint ahead'] = carla.Location(x=cmdWP[0], y=cmdWP[1])
-                self.world_module.points_to_draw['waypoint ahead 2'] = carla.Location(x=cmdWP2[0], y=cmdWP2[1])
-            
-            
-            
-            """
+
             if self.world_module.args.play_mode != 0:
 #                for i in range(len(fpath.t)):
                 for i in range(self.T_ac_candidates):
@@ -756,8 +711,7 @@ class CarlaGymEnv(gym.Env):
                 self.world_module.points_to_draw['ego'] = [self.ego.get_location(), 'COLOR_SCARLET_RED_0']
                 self.world_module.points_to_draw['waypoint ahead'] = carla.Location(x=cmdWP[0], y=cmdWP[1])
                 self.world_module.points_to_draw['waypoint ahead 2'] = carla.Location(x=cmdWP2[0], y=cmdWP2[1])
-            """
-            
+
             """
                     **********************************************************************************************************************
                     ************************************************ Update Carla ********************************************************
@@ -789,9 +743,7 @@ class CarlaGymEnv(gym.Env):
             if self.is_finish_traj != 1:
                 # in such mode, each env step only do the step of planned trajectory
                 break
-        
-        
-        self.bdpl_path_list = None#erase
+
         """
                 *********************************************************************************************************************
                 *********************************************** RL Observation ******************************************************

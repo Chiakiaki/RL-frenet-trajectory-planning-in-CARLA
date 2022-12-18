@@ -1729,7 +1729,7 @@ class LidarSensor(object):
         blueprint_lidar = self.world.get_blueprint_library().find('sensor.lidar.ray_cast')
         # Modify the attributes of the blueprint to set image resolution and field of view.
         blueprint_lidar.set_attribute('channels', '8')
-        blueprint_lidar.set_attribute('points_per_second', '108000')
+        blueprint_lidar.set_attribute('points_per_second', '86400')
 #        blueprint_lidar.set_attribute('points_per_second', '54000')
         blueprint_lidar.set_attribute('upper_fov', '-2')
         blueprint_lidar.set_attribute('lower_fov', '-16')
@@ -1764,6 +1764,7 @@ class LidarSensor(object):
         yaw,d,points_rescue = rescue_lms(points,lidar_points_per_frame,return_points = True,floor_filter = floor_filter)
         # rl_s_ds = np.concatenate([2 - d*2/(d+10),[v/20.],[self.steer_pre]])#old
         self.lidar_points = points_rescue
+#        print(max(d),min(d))
 #        self.lidar_points = points
         return yaw,d,points_rescue
     

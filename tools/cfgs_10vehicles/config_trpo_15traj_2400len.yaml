@@ -4,10 +4,10 @@
 CARLA:
   DT: 0.1                                                       # Set to -1 for variable time-step (real-world simulation)
   LANE_WIDTH: 3.5
-  MAX_S: 2400                                                   # [int] max frenet s value available in global route,avoid up and down segment
+  MAX_S: 2400                                                   # [int] max frenet s value available in global route
 
 POLICY:
-  NAME: TRPO_BDP                                                    # DDPG/TRPO/PPO2/A2C
+  NAME: TRPO                                                    # DDPG/TRPO/PPO2/A2C
   NET: MLP                                                      # MLP/CNN/LSTM - DDPG does not have LSTM policy
   CNN_EXTRACTOR: sequence_1d_cnn_ego_bypass_tc                                # nature_cnn/sequence_1d_cnn/sequence_1d_cnn_ego_bypass
   ACTION_NOISE: 0.5                                             # DDPG only
@@ -21,7 +21,7 @@ GYM_ENV:
   MAX_ACC: 6.878                                                # equivalent to 24.7608 km/h.s for Tesla model 3
   LOOK_BACK: 30                                                 # [int] Steps to look back at last path for observation sequence vector
   TIME_STEP: 4                                                 # [int] Steps to look back at last path for observation sequence vector
-  LOOP_BREAK: 50                                                # [int] steps to break path following while loop  - must be greater than LOOK_BACK
+  LOOP_BREAK: 70                                                # [int] steps to break path following while loop  - must be greater than LOOK_BACK
   DISTN_FRM_VHCL_AHD: 200                                                # Effective distance to keep from vehicle ahead
 
 RL:
@@ -44,4 +44,4 @@ TRAFFIC_MANAGER:
   MAX_SPEED: 11.11                                              # Max speed for actors in random traffic
 
 
-T_ACTION_CANDIDATES: 4                                              # length of trajectories used for action(secondes), must be less than 5
+T_ACTION_CANDIDATES: 3                                              # length of trajectories used for action(secondes), must be less than 5
