@@ -554,7 +554,7 @@ class CarlaGymEnv(gym.Env):
             Tf_list = [4.2,5,5.8]
         elif self.num_traj == 15:
             Vf_n_list = [-3,-2,-1,0,1]
-            Tf_list = [3.2,4.1,5,5.9,7]
+            Tf_list = [3.2,4.1,5,5.9,6.8]
         else:
             raise NotImplementedError #do it yourself, it is easy
         
@@ -574,7 +574,7 @@ class CarlaGymEnv(gym.Env):
         
         #save some parames
                 #some variable defined in external_sampler
-        traj_action_params1 = traj_action_params(psi,self.T_ac_candidates,dt = self.dt)
+        traj_action_params1 = traj_action_params(psi,self.T_ac_candidates,dt = self.dt, scale_yaw = 400, scale_v = 0.05)
         self.external_sampler_variable = temp,init_speed,traj_action_params1,ego_state
 
         # convert path in bdpl_path_list to vector

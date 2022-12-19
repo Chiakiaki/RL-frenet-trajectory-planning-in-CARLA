@@ -44,4 +44,4 @@ TRAFFIC_MANAGER:
   MAX_SPEED: 11.11                                              # Max speed for actors in random traffic
 
 
-T_ACTION_CANDIDATES: 3                                              # length of trajectories used for action(secondes), must be less than 5
+T_ACTION_CANDIDATES: 1.5                                              # length of trajectories used for action(secondes), must be less than 5
