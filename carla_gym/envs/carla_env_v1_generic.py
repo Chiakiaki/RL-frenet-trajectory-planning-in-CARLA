@@ -66,7 +66,9 @@ class CarlaGymEnv(gym.Env):
         """
         self.mode = kwargs['mode']
         self.is_finish_traj = kwargs.pop('is_finish_traj',1)
-        self.num_traj = kwargs.pop('num_traj',3)
+        self.num_traj = kwargs.pop('num_traj', 3)
+        self.scale_yaw = kwargs.pop('scale_yaw', 40)
+        self.scale_v = kwargs.pop('scale_v',0.01)
         assert self.num_traj % 3 == 0, "currently need num_traj as integer time of 3"
         
 
@@ -574,7 +576,8 @@ class CarlaGymEnv(gym.Env):
         
         #save some parames
                 #some variable defined in external_sampler
-        traj_action_params1 = traj_action_params(psi,self.T_ac_candidates,dt = self.dt, scale_yaw = 400, scale_v = 0.05)
+#        traj_action_params1 = traj_action_params(psi,self.T_ac_candidates,dt = self.dt)
+        traj_action_params1 = traj_action_params(psi,self.T_ac_candidates,dt = self.dt, scale_yaw = self.scale_yaw, scale_v = self.scale_v)
         self.external_sampler_variable = temp,init_speed,traj_action_params1,ego_state
 
         # convert path in bdpl_path_list to vector

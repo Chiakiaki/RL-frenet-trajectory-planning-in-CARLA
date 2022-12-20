@@ -62,6 +62,8 @@ qrsh -l v100=1 -pe smp.pe 8 bash
 scp -r ~/RL-frenet-trajectory-planning-in-CARLA/bash_.sh ~/RL-frenet-trajectory-planning-in-CARLA/bash_bdp.sh p28367rs@csf3.itservices.manchester.ac.uk:~/scratch/
 rm bash_*.e*
 rm bash_*.o*
+rm sh*.e*
+rm sh*.o*
 rm onestep*.o*
 rm onestep*.e*
 rm -r ~/RL-frenet-trajectory-planning-in-CARLA/logs/*
