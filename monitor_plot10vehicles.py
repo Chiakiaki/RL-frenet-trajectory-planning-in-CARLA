@@ -24,7 +24,8 @@ def plot_rewards(folder, window_size=100, colors=None, alpha=0.2, lr=None, n_tim
     filter_ = ''
     agents=[]
     for filter_i in filter_list:
-        path = './logs/' + folder + '/' + '*' + filter_i + '*/'
+        folder[0]
+        path = './logs/' + folder[0] + '/' + '*' + filter_i + '*/'
         names = []
         agents_i = glob.glob(path)
         agents += agents_i
