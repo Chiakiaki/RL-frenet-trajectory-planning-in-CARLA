@@ -90,7 +90,7 @@ def plot_rewards(folder, window_size=100, colors=None, alpha=0.2, lr=None, n_tim
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--folder', nargs='+', type=str, default="v5_10vehicles")
+    parser.add_argument('--folder', nargs='+', type=str, default=["v5_10vehicles"])
 #    parser.add_argument('--agent_ids', nargs='+', type=int, default=None)
     parser.add_argument('--window_size', type=int, default=1000)
     parser.add_argument('--colors', nargs='+', type=str, default=None)
