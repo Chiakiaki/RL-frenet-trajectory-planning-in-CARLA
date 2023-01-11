@@ -5,7 +5,9 @@ UCSC - ASL
 
 import gym
 import time
+import math
 import itertools
+import matplotlib.pyplot as plt
 from tools.modules import *
 from config import cfg
 from agents.local_planner.frenet_optimal_trajectory import FrenetPlanner as MotionPlanner
@@ -13,7 +15,7 @@ from agents.low_level_controller.controller import VehiclePIDController
 from agents.tools.misc import get_speed
 from agents.low_level_controller.controller import IntelligentDriverModel
 
-from .utils import traj2action,action2traj,get_traj_x0,traj_action_params,traj_distance_l2,traj2action_no_start_yaw
+from .utils import traj2action,action2traj,get_traj_x0,traj_action_params,traj_distance_l2,traj2action_no_start_yaw2
 
 MODULE_WORLD = 'WORLD'
 MODULE_HUD = 'HUD'
@@ -56,6 +58,15 @@ def closest_wp_idx(ego_state, fpath, f_idx, w_size=10):
 
     return f_idx + closest_wp_index
 
+def get_speed_ms(vehicle):
+    """
+    Compute speed of a vehicle in Kmh
+    :param vehicle: the vehicle for which speed is calculated
+    :return: speed as a float in Kmh
+    """
+    vel = vehicle.get_velocity()
+    return math.sqrt(vel.x ** 2 + vel.y ** 2 + vel.z ** 2)
+
 
 class CarlaGymEnv(gym.Env):
     # metadata = {'render.modes': ['human']}
@@ -66,9 +77,11 @@ class CarlaGymEnv(gym.Env):
         """
         self.mode = kwargs['mode']
         self.is_finish_traj = kwargs.pop('is_finish_traj',1)
+        self.use_lidar = kwargs.pop('use_lidar',0)
         self.num_traj = kwargs.pop('num_traj', 3)
         self.scale_yaw = kwargs.pop('scale_yaw', 40)
         self.scale_v = kwargs.pop('scale_v',0.01)
+        self.debug_bdp = kwargs.pop('debug',0)
         assert self.num_traj % 3 == 0, "currently need num_traj as integer time of 3"
         
 
@@ -126,11 +139,12 @@ class CarlaGymEnv(gym.Env):
             self.high_state = np.array(
                 [[1 for _ in range(self.look_back)] for _ in range(int(self.N_SPAWN_CARS + 1) * 2 + 1)])
         
-        if self.is_finish_traj == 1:
+        if self.use_lidar == 0:
             self.observation_space = gym.spaces.Box(low=-1, high=1, shape=(self.time_step + 1, 9),
                                                 dtype=np.float32)
         else:
-            self.observation_space = gym.spaces.Box(low=-1, high=1, shape=(self.time_step + 1, 9),
+            print('use lidar sensor for state representation')
+            self.observation_space = gym.spaces.Box(low=-2, high=2, shape=(362,),
                                                 dtype=np.float32)
         
         
@@ -139,18 +153,18 @@ class CarlaGymEnv(gym.Env):
         if self.mode == 'bdp' or self.mode == 'ddpg':
             """Changes for BDPL: action space is ac_candidates's space"""
             """ddpg use same action space with bdp"""
-            action_low = np.array([-1.]*(self.T_ac_candidates*2))#-1 because we use 'yaw_change' for action feature 
-            action_high = np.array([1.]*(self.T_ac_candidates*2))
-            self.action_space = gym.spaces.Box(low = action_low, high=action_high, shape=([self.T_ac_candidates*2]), dtype=np.float32)
+            action_low = np.array([-1.]*(self.T_ac_candidates+1))#-1 because we use 'yaw_change' for action feature 
+            action_high = np.array([1.]*(self.T_ac_candidates+1))
+            self.action_space = gym.spaces.Box(low = action_low, high=action_high, shape=([self.T_ac_candidates+1]), dtype=np.float32)
         elif self.mode == 'bdpCatagorical':
             """still box as space, but only give one-hot label"""
             action_low = np.array([-1.]*(self.num_traj))#-1 because we use 'yaw_change' for action feature 
             action_high = np.array([1.]*(self.num_traj))
             self.action_space = gym.spaces.Box(low = action_low, high=action_high, shape=([self.num_traj]), dtype=np.float32)
         elif self.mode == 'combined':
-            action_low = np.array([-1.]*(self.T_ac_candidates*2 + self.num_traj))#-1 because we use 'yaw_change' for action feature 
-            action_high = np.array([1.]*(self.T_ac_candidates*2 + self.num_traj))
-            self.action_space = gym.spaces.Box(low = action_low, high=action_high, shape=([self.T_ac_candidates*2 + self.num_traj]), dtype=np.float32)
+            action_low = np.array([-1.]*(self.T_ac_candidates+1 + self.num_traj))#-1 because we use 'yaw_change' for action feature 
+            action_high = np.array([1.]*(self.T_ac_candidates+1 + self.num_traj))
+            self.action_space = gym.spaces.Box(low = action_low, high=action_high, shape=([self.T_ac_candidates+1 + self.num_traj]), dtype=np.float32)
         elif self.mode == 'continuous_catagorical':
             """original action space of env_v1"""
             action_low = np.array([-1])
@@ -180,6 +194,7 @@ class CarlaGymEnv(gym.Env):
         self.init_transform = None  # ego initial transform to recover at each episode
         self.acceleration_ = 0
         self.eps_rew = 0
+        self.steer_pre = 0.0
 
         """
         ['EGO', 'LEADING', 'FOLLOWING', 'LEFT', 'LEFT_UP', 'LEFT_DOWN', 'LLEFT', 'LLEFT_UP',
@@ -555,8 +570,12 @@ class CarlaGymEnv(gym.Env):
             Vf_n_list = [-2,-1,0]
             Tf_list = [4.2,5,5.8]
         elif self.num_traj == 15:
-            Vf_n_list = [-3,-2,-1,0,1]
-            Tf_list = [3.2,4.1,5,5.9,6.8]
+            if self.debug_bdp == 0:
+                Vf_n_list = [-3,-2,-1,0,1]
+                Tf_list = [3.2,4.1,5,5.9,6.8]
+            else:
+                Vf_n_list = [-1,-1,-1,-1,-1]
+                Tf_list = [5,5,5,5,5]
         else:
             raise NotImplementedError #do it yourself, it is easy
         
@@ -590,7 +609,7 @@ class CarlaGymEnv(gym.Env):
         def process_path_list_as_acs(path_list,traj_action_params):
             #note: when on vehicle start from stationary, the frenet trajectory for left lane-change and right
             #       lane change has sharp turning rate at start. So we neglect the first yaw_change value
-            ac_candidates= [traj2action_no_start_yaw(tmp_path,traj_action_params)[0] for tmp_path in path_list]
+            ac_candidates= [traj2action_no_start_yaw2(tmp_path,traj_action_params)[0] for tmp_path in path_list]
             return np.array(ac_candidates)
         
         
@@ -722,6 +741,7 @@ class CarlaGymEnv(gym.Env):
 
             # control = self.vehicleController.run_step(cmdSpeed, cmdWP)  # calculate control
             control = self.vehicleController.run_step_2_wp(cmdSpeed, cmdWP, cmdWP2)  # calculate control
+            self.steer_pre = control.steer
             self.ego.apply_control(control)  # apply control
 
             """
@@ -800,27 +820,33 @@ class CarlaGymEnv(gym.Env):
                 *********************************************** RL Observation ******************************************************
                 *********************************************************************************************************************
         """
+        if self.use_lidar == 0:
+            if cfg.GYM_ENV.FIXED_REPRESENTATION:
+                self.state = self.fix_representation()# (5,9)
+                if self.verbosity == 2:
+                    print(3 * '---EPS UPDATE---')
+                    print(TENSOR_ROW_NAMES[0].ljust(15),
+                          #      '{:+8.6f}  {:+8.6f}'.format(self.state[-1][1], self.state[-1][0]))
+                         '{:+8.6f}'.format(self.state[-1][0]))
+                    for idx in range(1, self.state.shape[1]):
+                        print(TENSOR_ROW_NAMES[idx].ljust(15), '{:+8.6f}'.format(self.state[-1][idx]))
+    
+    
+            if self.verbosity == 3: 
+                print(self.state)
+            """*********************************************************************************************************************
+                    *********************************************** RL Observation for lidar sensor *********************
+                    *********************************************************************************************************************
+            """
+        else:
+            d = self.world_module.lidar_sensor.d
+            v = get_speed_ms(self.ego)
+            rl_s_ds = np.concatenate([2 - d*2/(d+10),[v/20.],[self.steer_pre*10]])#old #(362,) assume this is the projection to front window
+            self.state = rl_s_ds
+#            plt.plot(rl_s_ds)
+#            plt.show()
+#            print(v,self.steer_pre)
 
-        if cfg.GYM_ENV.FIXED_REPRESENTATION:
-            self.state = self.fix_representation()# (5,9)
-            if self.verbosity == 2:
-                print(3 * '---EPS UPDATE---')
-                print(TENSOR_ROW_NAMES[0].ljust(15),
-                      #      '{:+8.6f}  {:+8.6f}'.format(self.state[-1][1], self.state[-1][0]))
-                     '{:+8.6f}'.format(self.state[-1][0]))
-                for idx in range(1, self.state.shape[1]):
-                    print(TENSOR_ROW_NAMES[idx].ljust(15), '{:+8.6f}'.format(self.state[-1][idx]))
-
-
-        if self.verbosity == 3: print(self.state)
-        
-        """
-                *********************************************************************************************************************
-                *********************************************** RL Observation for one_step using lidar *********************
-                *********************************************************************************************************************
-        """
-        
-#        rl_s_ds = np.concatenate([2 - d*2/(d+10),[v/20.],[self.steer_pre]])#old
         
         
         
@@ -904,6 +930,7 @@ class CarlaGymEnv(gym.Env):
         self.traffic_module.reset(self.init_s, init_d)
         self.motionPlanner.reset(self.init_s, self.world_module.init_d, df_n=0, Tf=4, Vf_n=0, optimal_path=False)
         self.f_idx = 0
+        self.steer_pre = 0.0
 
         self.n_step = 0  # initialize episode steps count
         self.eps_rew = 0
@@ -914,16 +941,21 @@ class CarlaGymEnv(gym.Env):
 
         self.actor_enumerated_dict['EGO'] = {'NORM_S': [0], 'NORM_D': [init_norm_d],
                                              'S': ego_s_list, 'D': ego_d_list, 'SPEED': [0]}
-
-        if cfg.GYM_ENV.FIXED_REPRESENTATION:
-            self.state = self.fix_representation()
-            if self.verbosity == 2:
-                print(3 * '---RESET---')
-                print(TENSOR_ROW_NAMES[0].ljust(15),
-                      #      '{:+8.6f}  {:+8.6f}'.format(self.state[-1][1], self.state[-1][0]))
-                      '{:+8.6f}'.format(self.state[-1][0]))
-                for idx in range(1, self.state.shape[1]):
-                    print(TENSOR_ROW_NAMES[idx].ljust(15), '{:+8.6f}'.format(self.state[-1][idx]))
+        if self.use_lidar == 0:
+            if cfg.GYM_ENV.FIXED_REPRESENTATION:
+                self.state = self.fix_representation()
+                if self.verbosity == 2:
+                    print(3 * '---RESET---')
+                    print(TENSOR_ROW_NAMES[0].ljust(15),
+                          #      '{:+8.6f}  {:+8.6f}'.format(self.state[-1][1], self.state[-1][0]))
+                          '{:+8.6f}'.format(self.state[-1][0]))
+                    for idx in range(1, self.state.shape[1]):
+                        print(TENSOR_ROW_NAMES[idx].ljust(15), '{:+8.6f}'.format(self.state[-1][idx]))
+        else:
+            d = self.world_module.lidar_sensor.d
+            v = get_speed_ms(self.ego)
+            rl_s_ds = np.concatenate([2 - d*2/(d+10),[v/20.],[self.steer_pre]])#old #(362,) assume this is the projection to front window
+            self.state = rl_s_ds
 
         # ---
         # Ego starts to move slightly after being relocated when a new episode starts. Probably, ego keeps a fraction of previous acceleration after

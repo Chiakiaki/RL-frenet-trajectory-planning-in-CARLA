@@ -1724,6 +1724,8 @@ class LidarSensor(object):
     def __init__(self,parent_actor):
         self._parent = parent_actor
         self.lidar_points = None
+        self.d = None
+        self.yaw = None
         self.world = self._parent.get_world()
         self.lidar_points_per_frame = 360 #must manually check!!!!!
         blueprint_lidar = self.world.get_blueprint_library().find('sensor.lidar.ray_cast')
@@ -1764,6 +1766,8 @@ class LidarSensor(object):
         yaw,d,points_rescue = rescue_lms(points,lidar_points_per_frame,return_points = True,floor_filter = floor_filter)
         # rl_s_ds = np.concatenate([2 - d*2/(d+10),[v/20.],[self.steer_pre]])#old
         self.lidar_points = points_rescue
+        self.d = d
+        self.yaw = yaw
 #        print(max(d),min(d))
 #        self.lidar_points = points
         return yaw,d,points_rescue

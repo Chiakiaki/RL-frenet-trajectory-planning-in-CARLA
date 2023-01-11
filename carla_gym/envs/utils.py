@@ -97,6 +97,20 @@ def traj2action_no_start_yaw(traj,traj_action_params):
     yaw_change = rescure_yaw_change(yaw_change)
     return np.concatenate([yaw_change*scale_yaw,v*scale_v]),x[0],y[0]
 
+def traj2action_no_start_yaw2(traj,traj_action_params):
+    #only use last velocity
+    
+    yaw0,T_ac_candidates,scale_yaw,scale_v,dt = traj_action_params.get_params()
+    assert len(traj.x) > T_ac_candidates + 1
+    x = np.array(traj.x)#length at least T+1
+    y = np.array(traj.y)
+    v,yaw = x2yaw(x,y,dt)
+    v = v[[T_ac_candidates-1]]
+    yaw = np.concatenate([[yaw0],yaw])
+    yaw_change = yaw[2:T_ac_candidates+2] - yaw[1:T_ac_candidates+1]
+    yaw_change = rescure_yaw_change(yaw_change)
+    return np.concatenate([yaw_change*scale_yaw,v*scale_v]),x[0],y[0]
+
 def get_traj_x0(traj):
     x = traj.x
     y = traj.y
