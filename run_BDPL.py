@@ -65,6 +65,7 @@ def parse_args_cfgs():
     parser.add_argument('--scale_v', type=float, default='0.01', help='learning_rate (default: 0.01)')
     
     parser.add_argument('--bdp_debug', type=int, default='0', help='bdp_debug (default: 0)')
+    parser.add_argument('--trpo_timesteps_per_batch', type=int, default='1024', help='trpo_timesteps_per_batch (default: 1024)')
 
     args = parser.parse_args()
 
@@ -93,6 +94,7 @@ def parse_args_cfgs():
 
 if __name__ == '__main__':
     args, cfg = parse_args_cfgs()
+    trpo_timesteps_per_batch = args.trpo_timesteps_per_batch
     print('Env is starting')
     env = gym.make(args.env, mode = args.planner_mode, is_finish_traj = args.is_finish_traj, use_lidar = args.use_lidar, num_traj = args.num_traj, scale_yaw = args.scale_yaw, scale_v = args.scale_v, debug = args.bdp_debug)
     if args.play_mode:
@@ -164,11 +166,11 @@ if __name__ == '__main__':
         elif cfg.POLICY.NAME == 'PPO2':
             model = PPO2(policy[cfg.POLICY.NET], env, verbose=1, learning_rate = args.learning_rate, model_dir=save_path,tensorboard_log=save_path, policy_kwargs={'cnn_extractor': eval(cfg.POLICY.CNN_EXTRACTOR)})
         elif cfg.POLICY.NAME == 'TRPO':
-            model = TRPO(policy[cfg.POLICY.NET], env, verbose=1, model_dir=save_path,tensorboard_log=save_path, policy_kwargs={'cnn_extractor': eval(cfg.POLICY.CNN_EXTRACTOR)})#no learning_rate
+            model = TRPO(policy[cfg.POLICY.NET], env, verbose=1, timesteps_per_batch = trpo_timesteps_per_batch, model_dir=save_path,tensorboard_log=save_path, policy_kwargs={'cnn_extractor': eval(cfg.POLICY.CNN_EXTRACTOR)})#no learning_rate
         elif cfg.POLICY.NAME =='A2C':
             model = A2C(policy[cfg.POLICY.NET], env, verbose=1, learning_rate = args.learning_rate, model_dir=save_path,tensorboard_log=save_path, policy_kwargs={'cnn_extractor': eval(cfg.POLICY.CNN_EXTRACTOR)})
         elif cfg.POLICY.NAME == 'TRPO_BDP':
-            model = TRPO_bdp(policy[cfg.POLICY.NET], env, verbose=1, model_dir=save_path,tensorboard_log=save_path, policy_kwargs={'feature_extraction': 'mlp','cnn_extractor': eval(cfg.POLICY.CNN_EXTRACTOR)})#no learning_rate
+            model = TRPO_bdp(policy[cfg.POLICY.NET], env, verbose=1, timesteps_per_batch = trpo_timesteps_per_batch, model_dir=save_path,tensorboard_log=save_path, policy_kwargs={'feature_extraction': 'mlp','cnn_extractor': eval(cfg.POLICY.CNN_EXTRACTOR)})#no learning_rate
         elif cfg.POLICY.NAME == 'BDP':
             model = BDPL(policy[cfg.POLICY.NET], env, verbose = 1, learning_rate = args.learning_rate, model_dir=save_path,tensorboard_log=save_path, policy_kwargs={'feature_extraction': 'mlp','cnn_extractor': eval(cfg.POLICY.CNN_EXTRACTOR)})
         else:
