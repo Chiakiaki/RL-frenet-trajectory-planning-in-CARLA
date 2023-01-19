@@ -1163,7 +1163,10 @@ class ModuleWorld:
         x, y, z, yaw = frenet_to_inertial(self.init_s, self.init_d, self.global_csp)
         z += 0.1
 
-        spawn_point = carla.Transform(location=carla.Location(x=x, y=y, z=z), rotation=carla.Rotation(pitch=0.0, yaw=math.degrees(yaw), roll=0.0))
+        spawn_point_old = carla.Transform(location=carla.Location(x=x, y=y, z=z), rotation=carla.Rotation(pitch=0.0, yaw=math.degrees(yaw), roll=0.0))
+        #more aligned with waypoint (not necessary unless in short hard test mode)
+        spawn_point = self.town_map.get_waypoint(carla.Location(x=x, y=y, z=z)).transform
+        spawn_point.location.z += 0.1
         self.hero_actor = self.world.spawn_actor(blueprint, spawn_point)
         self.hero_actor.set_autopilot(False,self.tm_port)
         print('Spawned ego in: ', spawn_point)
@@ -1182,7 +1185,7 @@ class ModuleWorld:
             self.camera_manager = CameraManager(self.hero_actor, 1280, 720)
             self.camera_manager.set_sensor()
 
-    def reset(self):
+    def reset(self,init_velocity = None):
         # remove collision history
         self.collision_sensor.reset()
         self.los_sensor.reset()
@@ -1197,11 +1200,15 @@ class ModuleWorld:
 
         x, y, z, yaw = frenet_to_inertial(self.init_s, self.init_d, self.global_csp)
         z += 0.1
+        
 
-        self.hero_actor.set_velocity(carla.Vector3D(x=0, y=0, z=0))
         self.hero_actor.set_angular_velocity(carla.Vector3D(x=0, y=0, z=0))
         transform = carla.Transform(location=carla.Location(x=x, y=y, z=z), rotation=carla.Rotation(pitch=0.0, yaw=math.degrees(yaw), roll=0.0))
         self.hero_actor.set_transform(transform)
+        if init_velocity is None:
+            self.hero_actor.set_velocity(carla.Vector3D(x=0, y=0, z=0))
+        else:
+            self.hero_actor.set_velocity(transform.get_forward_vector() * init_velocity)
 
     def tick(self):
         actors = self.world.get_actors()
@@ -1874,7 +1881,7 @@ class TrafficManager:
             cruiseControl = CruiseControl(otherActor, los_sensor, s, d, lane, self.module_manager, targetSpeed=targetSpeed)
             deq_s = deque([s], maxlen=50)
             self.actors_batch.append({'Actor': otherActor, 'Sensor': los_sensor, 'Cruise Control': cruiseControl, 'Frenet State': [deq_s, d]})
-        return otherActor
+        return otherActor,transform
 
     def start(self):
         self.world_module = self.module_manager.get_module(MODULE_WORLD)
@@ -1921,6 +1928,69 @@ class TrafficManager:
             s = ego_s + col * 10 - 20  # -20 bc ego is on second column
             targetSpeed = random.uniform(self.min_speed, self.max_speed)  # m/s
             self.spawn_one_actor(s, lane, targetSpeed)
+            
+    def reset2(self, ego_s, ego_d):
+        """
+        Spawn 3 vehicles, a reproduction of my previous experiments
+        """
+        # remove actors and sensors
+        for actor_dic in self.actors_batch:
+            actor_dic['Actor'].destroy()
+            actor_dic['Sensor'].destroy()
+
+        # delete class instances and re-initialize lists
+        del self.actors_batch[:]
+
+        # re-spawn N_INIT_CARS of actors
+        ego_lane = int(ego_d / self.LANE_WIDTH)
+       
+        # front vehicle
+        s = ego_s + 15 + 10*np.random.rand()
+#        targetSpeed = random.uniform(self.min_speed, self.max_speed)#8.33 - 11.1
+        mean_v = cfg.LOCAL_PLANNER.MIN_SPEED# this is the target speed of hero actor
+        v = mean_v * 0.1 + mean_v * np.random.rand()
+        lane = ego_lane
+        actor,tr = self.spawn_one_actor(s,lane,v)
+        actor.set_velocity(tr.get_forward_vector() * (v))
+        
+
+        
+        # left and right
+        tmp2 = np.random.rand()
+        s1 = ego_s - 20
+#        v1 = mean_v * 0.5 + mean_v * np.random.rand()
+        v1 = mean_v
+        s2 = ego_s + 10*np.random.rand() - 5
+        v2 = mean_v * 0.5 + mean_v * np.random.rand()
+        
+        # left
+        
+        if tmp2 > 0.5:
+            if ego_lane == 2:
+                actor,tr = self.spawn_one_actor(s1,ego_lane - 1,v1)
+                actor.set_velocity(tr.get_forward_vector() * (v1))
+            elif ego_lane == -1:
+                actor,tr = self.spawn_one_actor(s1,ego_lane + 1,v1)
+                actor.set_velocity(tr.get_forward_vector() * (v1))
+            else:
+                actor,tr = self.spawn_one_actor(s1,ego_lane - 1,v1)
+                actor.set_velocity(tr.get_forward_vector() * (v1))
+                actor,tr = self.spawn_one_actor(s2,ego_lane + 1,v2)
+                actor.set_velocity(tr.get_forward_vector() * (v2))
+                
+        if tmp2 < 0.5:
+            if ego_lane == 2:
+                actor,tr = self.spawn_one_actor(s1,ego_lane - 1,v1)
+                actor.set_velocity(tr.get_forward_vector() * (v1))
+            elif ego_lane == -1:
+                actor,tr = self.spawn_one_actor(s1,ego_lane + 1,v1)
+                actor.set_velocity(tr.get_forward_vector() * (v1))
+            else:
+                actor,tr = self.spawn_one_actor(s1,ego_lane + 1,v1)
+                actor.set_velocity(tr.get_forward_vector() * (v1))
+                actor,tr = self.spawn_one_actor(s2,ego_lane - 1,v2)
+                actor.set_velocity(tr.get_forward_vector() * (v2))               
+            
 
     def destroy(self):
         # remove actors and sensors

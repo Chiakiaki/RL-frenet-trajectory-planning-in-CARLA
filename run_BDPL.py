@@ -66,7 +66,7 @@ def parse_args_cfgs():
     
     parser.add_argument('--bdp_debug', type=int, default='0', help='bdp_debug (default: 0)')
     parser.add_argument('--trpo_timesteps_per_batch', type=int, default='1024', help='trpo_timesteps_per_batch (default: 1024)')
-
+    parser.add_argument('--short_hard', type=int, default='0', help='whether to use short hard mode, 1 is true (default: 0)')
     args = parser.parse_args()
 
     args.num_timesteps = int(args.num_timesteps)
@@ -96,7 +96,7 @@ if __name__ == '__main__':
     args, cfg = parse_args_cfgs()
     trpo_timesteps_per_batch = args.trpo_timesteps_per_batch
     print('Env is starting')
-    env = gym.make(args.env, mode = args.planner_mode, is_finish_traj = args.is_finish_traj, use_lidar = args.use_lidar, num_traj = args.num_traj, scale_yaw = args.scale_yaw, scale_v = args.scale_v, debug = args.bdp_debug)
+    env = gym.make(args.env, mode = args.planner_mode, is_finish_traj = args.is_finish_traj, use_lidar = args.use_lidar, num_traj = args.num_traj, scale_yaw = args.scale_yaw, scale_v = args.scale_v, debug = args.bdp_debug, short_hard = args.short_hard)
     if args.play_mode:
         env.enable_auto_render()
     env.begin_modules(args)
@@ -153,6 +153,10 @@ if __name__ == '__main__':
             A good idea might be set env.observation_space bound by [0,1] or [-1,1]
             The original carla_gym is [-1,1]
         """
+        
+        n_steps_a2c = 5 #the nsteps for a2c. 5 is gym's default. bdp, TODO: add to config
+        n_steps_bdp = 128
+        n_steps_ppo = 128
         if cfg.POLICY.NAME == 'DDPG':
             action_noise = OrnsteinUhlenbeckActionNoise(mean=np.zeros(n_actions),
                                                         sigma=float(cfg.POLICY.ACTION_NOISE) * np.ones(n_actions))
@@ -164,15 +168,15 @@ if __name__ == '__main__':
             #note: DQN cannot work on contiuous action space env
             model = DQN(policy[cfg.POLICY.NET], env, verbose=1, learning_rate = args.learning_rate, tensorboard_log=save_path,  policy_kwargs={'cnn_extractor': eval(cfg.POLICY.CNN_EXTRACTOR)})
         elif cfg.POLICY.NAME == 'PPO2':
-            model = PPO2(policy[cfg.POLICY.NET], env, verbose=1, learning_rate = args.learning_rate, model_dir=save_path,tensorboard_log=save_path, policy_kwargs={'cnn_extractor': eval(cfg.POLICY.CNN_EXTRACTOR)})
+            model = PPO2(policy[cfg.POLICY.NET], env, verbose=1, learning_rate = args.learning_rate, n_steps = n_steps_ppo, model_dir=save_path,tensorboard_log=save_path, policy_kwargs={'cnn_extractor': eval(cfg.POLICY.CNN_EXTRACTOR)})
         elif cfg.POLICY.NAME == 'TRPO':
             model = TRPO(policy[cfg.POLICY.NET], env, verbose=1, timesteps_per_batch = trpo_timesteps_per_batch, model_dir=save_path,tensorboard_log=save_path, policy_kwargs={'cnn_extractor': eval(cfg.POLICY.CNN_EXTRACTOR)})#no learning_rate
         elif cfg.POLICY.NAME =='A2C':
-            model = A2C(policy[cfg.POLICY.NET], env, verbose=1, learning_rate = args.learning_rate, model_dir=save_path,tensorboard_log=save_path, policy_kwargs={'cnn_extractor': eval(cfg.POLICY.CNN_EXTRACTOR)})
+            model = A2C(policy[cfg.POLICY.NET], env, verbose=1, learning_rate = args.learning_rate, n_steps = n_steps_a2c, model_dir=save_path,tensorboard_log=save_path, policy_kwargs={'cnn_extractor': eval(cfg.POLICY.CNN_EXTRACTOR)})
         elif cfg.POLICY.NAME == 'TRPO_BDP':
             model = TRPO_bdp(policy[cfg.POLICY.NET], env, verbose=1, timesteps_per_batch = trpo_timesteps_per_batch, model_dir=save_path,tensorboard_log=save_path, policy_kwargs={'feature_extraction': 'mlp','cnn_extractor': eval(cfg.POLICY.CNN_EXTRACTOR)})#no learning_rate
         elif cfg.POLICY.NAME == 'BDP':
-            model = BDPL(policy[cfg.POLICY.NET], env, verbose = 1, learning_rate = args.learning_rate, model_dir=save_path,tensorboard_log=save_path, policy_kwargs={'feature_extraction': 'mlp','cnn_extractor': eval(cfg.POLICY.CNN_EXTRACTOR)})
+            model = BDPL(policy[cfg.POLICY.NET], env, verbose = 1, learning_rate = args.learning_rate, n_steps = n_steps_bdp, model_dir=save_path,tensorboard_log=save_path, policy_kwargs={'feature_extraction': 'mlp','cnn_extractor': eval(cfg.POLICY.CNN_EXTRACTOR)})
         else:
             print(cfg.POLICY.NAME)
             raise Exception('Algorithm name is not defined!')
@@ -224,6 +228,8 @@ if __name__ == '__main__':
             model = TRPO.load(model_dir)
         elif cfg.POLICY.NAME == 'A2C':
             model = A2C.load(model_dir)
+        elif cfg.POLICY.NAME == 'TRPO_BDP':
+            model = TRPO_bdp.load(model_dir)
         else:
             print(cfg.POLICY.NAME)
             raise Exception('Algorithm name is not defined!')

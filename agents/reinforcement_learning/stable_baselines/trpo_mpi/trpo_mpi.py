@@ -303,7 +303,7 @@ class TRPO(ActorCriticRLModel):
 
                     #  Stats not used for now
                     # TODO: replace with normal tb logging
-                    #  g_loss_stats = Stats(loss_names)
+                    #  g_loss_stats = Stats(loss_names)
                     #  d_loss_stats = Stats(reward_giver.loss_name)
                     #  ep_stats = Stats(["True_rewards", "Rewards", "Episode_length"])
 
@@ -353,7 +353,7 @@ class TRPO(ActorCriticRLModel):
                         args = seg["observations"], seg["observations"], seg["actions"], atarg
                         # Subsampling: see p40-42 of John Schulman thesis
                         # http://joschu.net/docs/thesis.pdf
-                        fvpargs = [arr[::1] for arr in args]
+                        fvpargs = [arr[::5] for arr in args]
 
                         self.assign_old_eq_new(sess=self.sess)
 

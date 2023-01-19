@@ -82,6 +82,9 @@ class CarlaGymEnv(gym.Env):
         self.scale_yaw = kwargs.pop('scale_yaw', 40)
         self.scale_v = kwargs.pop('scale_v',0.01)
         self.debug_bdp = kwargs.pop('debug',0)
+        self.short_hard_mode = kwargs.pop('short_hard',0)
+        self.restart_every = 100
+        self.step_counter = 0
         assert self.num_traj % 3 == 0, "currently need num_traj as integer time of 3"
         
 
@@ -563,21 +566,32 @@ class CarlaGymEnv(gym.Env):
             tmp_off_the_road = [off_the_road1,off_the_road2,off_the_road3]
             return bdpl_path_list, tmp_lanechange, tmp_off_the_road
         
-        if self.num_traj == 3:
-            Vf_n_list = [-1]
-            Tf_list = [5]
-        elif self.num_traj == 9:
-            Vf_n_list = [-2,-1,0]
-            Tf_list = [4.2,5,5.8]
-        elif self.num_traj == 15:
-            if self.debug_bdp == 0:
+        if self.short_hard_mode == 1:
+            if self.num_traj == 3:
+                Vf_n_list = [-1]
+                Tf_list = [3.2]
+            elif self.num_traj == 9:
+                Vf_n_list = [-2,-1,0]
+                Tf_list = [3.2,4.1,5]
+            elif self.num_traj == 15:
                 Vf_n_list = [-3,-2,-1,0,1]
-                Tf_list = [3.2,4.1,5,5.9,6.8]
-            else:
-                Vf_n_list = [-1,-1,-1,-1,-1]
-                Tf_list = [5,5,5,5,5]
+                Tf_list = [3.2,4.1,5,5.9,6.8]                
         else:
-            raise NotImplementedError #do it yourself, it is easy
+            if self.num_traj == 3:
+                Vf_n_list = [-1]
+                Tf_list = [5]
+            elif self.num_traj == 9:
+                Vf_n_list = [-2,-1,0]
+                Tf_list = [4.2,5,5.8]
+            elif self.num_traj == 15:
+                if self.debug_bdp == 0:
+                    Vf_n_list = [-3,-2,-1,0,1]
+                    Tf_list = [3.2,4.1,5,5.9,6.8]
+                else:
+                    Vf_n_list = [-1,-1,-1,-1,-1]
+                    Tf_list = [5,5,5,5,5]
+            else:
+                raise NotImplementedError
         
         self.bdpl_path_list = []
         self.tmp_lanechange = []
@@ -639,10 +653,17 @@ class CarlaGymEnv(gym.Env):
     def step(self, action=None):
         #for dev
 #        print(action)
+
+        
+        
         if self.bdpl_path_list is None:
             # so external_sampler not called, call it now
             # to be compatible with original.
             self.external_sampler()
+            
+        if self.is_finish_traj == 0:# could drive off the road in such mode
+            self.bdpl_path_list = self.bdpl_path_list_with_offroad
+            
         temp,init_speed,traj_action_params1,ego_state = self.external_sampler_variable
         """
         Though action space is box, here the action passed in should be int, because,
@@ -875,11 +896,17 @@ class CarlaGymEnv(gym.Env):
             # print(self.n_step, self.eps_rew)
                 
         else:
-            # only speed reward here
+            # only speed reward here.
+            # TODO: However, the speed reward will receive at each step, and one episode has much more steps now, so the magnitude of speed reward need to be cut, at about $length_of_traj$ magnitude
             e_speed = abs(self.targetSpeed - last_speed)
             r_speed = self.w_r_speed * np.exp(-e_speed ** 2 / self.maxSpeed * self.w_speed)  # 0<= r_speed <= self.w_r_speed
             #  first two path speed change increases regardless so we penalize it differently
-            reward = r_speed
+#            reward = (r_speed - self.w_r_speed * 0.5) / 100
+#            if last_speed < self.targetSpeed * 1./2.:
+#                reward = -1# now simply turn off speed reward, there is only collision reward now
+#            else:
+#                reward = 0
+            reward = 0
 
         """
                 **********************************************************************************************************************
@@ -916,6 +943,12 @@ class CarlaGymEnv(gym.Env):
             # print('eps rew: ', self.n_step, self.eps_rew)
             if self.verbosity: print('REWARD'.ljust(15), '{:+8.6f}'.format(reward))
             return self.state, reward, done, {'reserved': 0}
+        
+        # reset the env for short hard mode
+        self.step_counter += 1
+        if self.step_counter > self.restart_every and self.short_hard_mode == 1:
+
+            done = True
 
         self.eps_rew += reward
         # print(self.n_step, self.eps_rew)
@@ -923,11 +956,31 @@ class CarlaGymEnv(gym.Env):
         return self.state, reward, done, {'reserved': 0}
 
     def reset(self):
-        self.vehicleController.reset()
-        self.world_module.reset()
+        self.step_counter = 0
         self.init_s = self.world_module.init_s
-        init_d = self.world_module.init_d
-        self.traffic_module.reset(self.init_s, init_d)
+        
+        # ---
+        # Ego starts to move slightly after being relocated when a new episode starts. Probably, ego keeps a fraction of previous acceleration after
+        # being relocated. To solve this, the following procedure is needed.
+        self.ego.set_simulate_physics(enabled=False)
+        # for _ in range(5):
+        self.module_manager.tick()
+        self.ego.set_simulate_physics(enabled=True)
+        # ----
+        
+        if self.short_hard_mode == 1:
+#            self.vehicleController.reset()
+            self.world_module.reset(init_velocity = cfg.LOCAL_PLANNER.MIN_SPEED)
+#            self.world_module.reset(init_velocity = 10)
+            self.init_s = self.world_module.init_s
+            init_d = self.world_module.init_d
+            self.traffic_module.reset2(self.init_s, init_d)
+        else:
+            self.vehicleController.reset()
+            self.world_module.reset()
+            self.init_s = self.world_module.init_s
+            init_d = self.world_module.init_d
+            self.traffic_module.reset(self.init_s, init_d)
         self.motionPlanner.reset(self.init_s, self.world_module.init_d, df_n=0, Tf=4, Vf_n=0, optimal_path=False)
         self.f_idx = 0
         self.steer_pre = 0.0
@@ -956,15 +1009,11 @@ class CarlaGymEnv(gym.Env):
             v = get_speed_ms(self.ego)
             rl_s_ds = np.concatenate([2 - d*2/(d+10),[v/20.],[self.steer_pre]])#old #(362,) assume this is the projection to front window
             self.state = rl_s_ds
-
-        # ---
-        # Ego starts to move slightly after being relocated when a new episode starts. Probably, ego keeps a fraction of previous acceleration after
-        # being relocated. To solve this, the following procedure is needed.
-        self.ego.set_simulate_physics(enabled=False)
-        # for _ in range(5):
-        self.module_manager.tick()
-        self.ego.set_simulate_physics(enabled=True)
-        # ----
+        
+        for _ in range(1):#this seems to be the better solution for the first unstable frame.
+            #I think this is probably because, the vehicle is spawn at e.g. 0.1 meters above the ground. So, it will fall at first.
+            self.module_manager.tick()
+            
         return self.state
 
     def begin_modules(self, args):
@@ -1011,7 +1060,15 @@ class CarlaGymEnv(gym.Env):
 
         self.ego = self.world_module.hero_actor
         self.ego_los_sensor = self.world_module.los_sensor
-        self.vehicleController = VehiclePIDController(self.ego, args_lateral={'K_P': 1.5, 'K_D': 0.0, 'K_I': 0.0})
+        
+        if self.short_hard_mode:
+            self.vehicleController = VehiclePIDController(self.ego, args_lateral={'K_P': 1.5, 'K_D': 0.0, 'K_I': 0.0},args_longitudinal={'K_P': 1.0,
+            'K_D': 0,
+            'K_I': 1})
+        else:
+            self.vehicleController = VehiclePIDController(self.ego, args_lateral={'K_P': 1.5, 'K_D': 0.0, 'K_I': 0.0})
+            
+        
         self.IDM = IntelligentDriverModel(self.ego)
 
         self.module_manager.tick()  # Update carla world
