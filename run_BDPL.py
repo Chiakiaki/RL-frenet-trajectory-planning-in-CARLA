@@ -143,7 +143,9 @@ if __name__ == '__main__':
 
         else:
             save_path = 'logs/'
-            env = Monitor(env, 'logs/', info_keywords=('reserved',))                                   # logging monitor
+            env = Monitor(env, 'logs/', info_keywords=('reserved',))  
+        env.open_log_saver(currentPath + '/logs/agent_{}/'.format(args.agent_id), is_train = True)
+        # logging monitor
         model_dir = save_path + '{}_final_model'.format(cfg.POLICY.NAME)                               # model save/load directory
         
         

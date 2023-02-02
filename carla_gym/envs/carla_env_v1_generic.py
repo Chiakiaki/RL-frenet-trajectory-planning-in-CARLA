@@ -4,6 +4,7 @@ UCSC - ASL
 """
 
 import gym
+import numpy as np
 import time
 import math
 import itertools
@@ -68,6 +69,7 @@ def get_speed_ms(vehicle):
     return math.sqrt(vel.x ** 2 + vel.y ** 2 + vel.z ** 2)
 
 
+
 class CarlaGymEnv(gym.Env):
     # metadata = {'render.modes': ['human']}
     def __init__(self,**kwargs):
@@ -85,6 +87,9 @@ class CarlaGymEnv(gym.Env):
         self.short_hard_mode = kwargs.pop('short_hard',0)
         self.restart_every = 100
         self.step_counter = 0
+        self.global_steps = 0
+        self.is_save_log = False
+        self.log_dir = None
         assert self.num_traj % 3 == 0, "currently need num_traj as integer time of 3"
         
 
@@ -220,6 +225,15 @@ class CarlaGymEnv(gym.Env):
 
     def seed(self, seed=None):
         pass
+    
+    def open_log_saver(self, log_dir, is_train = False):
+        self.is_save_log = True
+        self.log_dir = log_dir
+        if is_train == True:
+            self._log_appendix = '_train'
+        else:
+            self._log_appendix = '_test'
+            
 
     def get_vehicle_ahead(self, ego_s, ego_d, ego_init_d, ego_target_d):
         """
@@ -914,6 +928,7 @@ class CarlaGymEnv(gym.Env):
                 **********************************************************************************************************************
         """
 
+
         done = False
         if collision:
             # print('Collision happened!')
@@ -922,6 +937,12 @@ class CarlaGymEnv(gym.Env):
             self.eps_rew += reward
             # print('eps rew: ', self.n_step, self.eps_rew)
             if self.verbosity: print('REWARD'.ljust(15), '{:+8.6f}'.format(reward))
+            
+            if self.is_save_log == True:
+                with open(self.log_dir + '/collision' + self._log_appendix + '.txt', "at") as fc:#open as appending mode
+                    np.savetxt(fc, [self.global_steps],fmt='%d')
+            
+            
             return self.state, reward, done, {'reserved': 0}
 
         elif track_finished:
@@ -946,6 +967,7 @@ class CarlaGymEnv(gym.Env):
         
         # reset the env for short hard mode
         self.step_counter += 1
+        self.global_steps += 1
         if self.step_counter > self.restart_every and self.short_hard_mode == 1:
 
             done = True
@@ -954,8 +976,11 @@ class CarlaGymEnv(gym.Env):
         # print(self.n_step, self.eps_rew)
         if self.verbosity: print('REWARD'.ljust(15), '{:+8.6f}'.format(reward))
         return self.state, reward, done, {'reserved': 0}
+    
 
     def reset(self):
+        
+        
         self.step_counter = 0
         self.init_s = self.world_module.init_s
         
