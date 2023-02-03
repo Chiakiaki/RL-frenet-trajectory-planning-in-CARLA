@@ -6,8 +6,10 @@ import os
 import glob
 from matplotlib.font_manager import FontProperties
 from scipy import stats
+from scipy.sparse import coo_matrix
 '''
-Note that, the reward here is episode reward.
+Please use this one. I fixed many bugs and
+the computation is now correct.
 
 
 Utility Folder in order to visualize Rewards
@@ -92,23 +94,39 @@ def plot_rewards(folder, window_size=100, colors=None, alpha=0.2, lr=None, n_tim
     std_dev = []
     step_cum = []
 
+    def find_first_ind_after_n(n,ind):
+        for index_of_ind,i in enumerate(ind):
+            if i>=n:
+                return index_of_ind
+
+    
     for x in range(len(data)):
         temp = []
         temp_step = []
         temp_std = []
         sum_ = 0
+        
+        
+        
+        for i in range(data[x]['r'].shape[0]):
+            sum_ += data[x]['l'][i]
+            temp_step.append(sum_)
+            if sum_ > n_timesteps:
+                break
+            
 
+        r_mat = coo_matrix((data[x]['r'], (np.zeros_like(temp_step), temp_step)), shape=(1, temp_step+1)).toarray()
+
+        
+        ind_of_ind = find_first_ind_after_n(window_size)
+        
         for i in range(window_size - 1):
             # temp.append(np.mean(data[x]['r'][:i]))
             temp.append(0)
-            sum_ += data[x]['l'][i]
-            temp_step.append(sum_)
-        
+
         for i in range(window_size - 1, data[x]['r'].shape[0]):
             temp.append(np.mean(data[x]['r'][i - window_size - 1:i]))
             temp_std.append(np.std(data[x]['r'][i - window_size - 1:i]))
-            sum_ += data[x]['l'][i]
-            temp_step.append(sum_)
             if sum_ > n_timesteps:
                 break
 
@@ -138,7 +156,7 @@ def plot_rewards(folder, window_size=100, colors=None, alpha=0.2, lr=None, n_tim
     plt.title('CARLA')
 #    plt.ylim([-25,75])
     plt.xlabel('TimeSteps')
-    plt.ylabel('Mean_Episode_Reward_-{}'.format(window_size))
+    plt.ylabel('Mean_Reward-{}'.format(window_size))
     plt.legend(lr)
     plt.grid()
     plt.show()
@@ -149,29 +167,17 @@ def plot_rewards(folder, window_size=100, colors=None, alpha=0.2, lr=None, n_tim
                 return index
         
     #t_test
-    if len(data) == 2:
-        #lets do it at the 3000000
-
-        
-        ind1 = np.nanargmax(np.where(np.array(average[0]) != 0, average[0], np.nan))
-        ind2 = np.nanargmax(np.where(np.array(average[1]) != 0, average[1], np.nan))
-        
-        mean_diff = average[0][ind1]-average[1][ind2]
-        std1 = std_dev[0][ind1-window_size+1]
-        std2 = std_dev[1][ind2-window_size+1]
-        t1,p1 = t_test_for_mean(mean_diff,std1,std2,window_size)
-        print('t:',t1,' p:',1-p1)
-        print('best:',average[0][ind1],average[1][ind2])
+#    if len(data) == 2:
+#        #lets do it at the 3000000
+#        ind1 = find_first_ind_after_n(3000000,step_cum[0])
+#        ind2 = find_first_ind_after_n(3000000,step_cum[1])
+#        mean_diff = average[0][ind1]-average[1][ind2]
+#        std1 = std_dev[0][ind1]
+#        std2 = std_dev[1][ind2]
+#        t,p = t_test_for_mean(mean_diff,std1,std2,window_size)
+#        print('t:',t,' p:',p)
         
         
-        ind1 = find_first_ind_after_n(3000000,step_cum[0])
-        ind2 = find_first_ind_after_n(3000000,step_cum[1])
-        mean_diff = average[0][ind1]-average[1][ind2]
-        std1 = std_dev[0][ind1-window_size+1]
-        std2 = std_dev[1][ind2-window_size+1]
-        t2,p2 = t_test_for_mean(mean_diff,std1,std2,window_size)
-        print('t:',t2,' p:',1-p2)
-        print('3000000:',average[0][ind1],average[1][ind2])        
 
 
 if __name__ == '__main__':

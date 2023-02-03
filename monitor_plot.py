@@ -4,6 +4,11 @@ import matplotlib.pyplot as plt
 import argparse
 
 '''
+Do not use this one.
+This is original code but the computation of mean is wrong.
+
+
+
 Utility Folder in order to visualize Rewards
 Usage: place agent folder in logs/agent_xx
 args: 
