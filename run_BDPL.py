@@ -157,7 +157,7 @@ if __name__ == '__main__':
         """
         
         n_steps_a2c = 5 #the nsteps for a2c. 5 is gym's default. bdp, TODO: add to config
-        n_steps_bdp = 128
+        n_steps_bdp = 5
         n_steps_ppo = 128
         if cfg.POLICY.NAME == 'DDPG':
             action_noise = OrnsteinUhlenbeckActionNoise(mean=np.zeros(n_actions),
