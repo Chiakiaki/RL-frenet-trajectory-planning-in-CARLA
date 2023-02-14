@@ -158,7 +158,7 @@ if __name__ == '__main__':
         
         n_steps_a2c = 5 #the nsteps for a2c. 5 is gym's default. bdp, TODO: add to config
         n_steps_bdp = 5
-        n_steps_ppo = 128
+        n_steps_ppo = 5
         if cfg.POLICY.NAME == 'DDPG':
             action_noise = OrnsteinUhlenbeckActionNoise(mean=np.zeros(n_actions),
                                                         sigma=float(cfg.POLICY.ACTION_NOISE) * np.ones(n_actions))
@@ -240,8 +240,19 @@ if __name__ == '__main__':
         try:
             obs = env.reset()
             while True:
-                action, _states = model.predict(obs)
+                
+                
+                if cfg.POLICY.NAME == 'TRPO_BDP' or cfg.POLICY.NAME == 'BDP':
+                    obs = np.array(obs)
+                    ac_candidates,n_ac_candidates = env.external_sampler()
+                    action, vpred, _states, prob, goodness = model.step(obs.reshape(-1, *obs.shape),ac_candidates, None, None, debug1=True)
+                    action = action[0][0]
+                    # remarks: in bdp, the action is actually action_idx, does not need clipping
+                else:
+                    action, _states = model.predict(obs)
                 obs, rewards, done, info = env.step(action)
+                
+                
                 env.render()
                 if done:
                     obs = env.reset()

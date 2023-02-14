@@ -385,7 +385,7 @@ class FeedForwardBoltzmannDistributionPolicy(BoltzmannDistributionPolicy):
 
         
     
-    def step(self, obs, ac_candidates, state=None, mask=None, deterministic=False):
+    def step(self, obs, ac_candidates, state=None, mask=None, deterministic=False, debug1=False):
         # obs: (1,obs_dims)
         # ac_candidates: (n_ac_candidates,ac_dims)
         #feed action_ph,obs_ph,
@@ -404,11 +404,14 @@ class FeedForwardBoltzmannDistributionPolicy(BoltzmannDistributionPolicy):
             grouping = np.array([[1]*num_traj])
             
             if self.enable_obs_ph_for_vf == False:
-                sample_a_idx, value, prob_n = self.sess.run([self.sample_a_idx,self.value_flat,self.prob_n], feed_dict={self.obs_ph:all_obs, self.action_ph:ac_candidates,self.grouping_ph_mn:grouping})
+                sample_a_idx, value, prob_n, goodness_n = self.sess.run([self.sample_a_idx,self.value_flat,self.prob_n,self.goodness_n], feed_dict={self.obs_ph:all_obs, self.action_ph:ac_candidates,self.grouping_ph_mn:grouping})
             else:
-                sample_a_idx, value, prob_n = self.sess.run([self.sample_a_idx,self.value_flat,self.prob_n], feed_dict={self.obs_ph:all_obs, self.action_ph:ac_candidates,self.grouping_ph_mn:grouping,self.obs_ph_for_vf:obs})
+                sample_a_idx, value, prob_n, goodness_n = self.sess.run([self.sample_a_idx,self.value_flat,self.prob_n,self.goodness_n], feed_dict={self.obs_ph:all_obs, self.action_ph:ac_candidates,self.grouping_ph_mn:grouping,self.obs_ph_for_vf:obs})
             
-            return sample_a_idx, value, self.initial_state, prob_n
+            if debug1 == False:
+                return sample_a_idx, value, self.initial_state, prob_n
+            else:
+                return sample_a_idx, value, self.initial_state, prob_n, goodness_n
 
     def proba_step(self, obs, ac_candidates, grouping_mn, state=None, mask=None):
         tile_args = len(obs.shape)*[1]

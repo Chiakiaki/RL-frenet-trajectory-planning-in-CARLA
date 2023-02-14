@@ -81,7 +81,8 @@ def traj_segment_generator(policy, env, horizon, reward_giver=None, gail=False, 
         # remark: observation.reshape(-1, *observation.shape) will add a dim before observation.shape
         # remark: action here is actually action_idx,
         # original return in trpo using catacorical is of shape (1,), (1,), (None)
-        action, vpred, states, _ = policy.step(observation.reshape(-1, *observation.shape),ac_candidates, states, done)
+        action, vpred, states, prob = policy.step(observation.reshape(-1, *observation.shape),ac_candidates, states, done)
+#        print(prob)
         action = action[0]#now shape (1,)
         d_action = np.shape(ac_candidates[[0],:])[1:]
         # TODO: check action shape

@@ -64,7 +64,7 @@ print(stats.ttest_ind(a,b))
     #stats.ttest_ind(?,?)
 
 
-def plot_rewards(folder, window_size=100, colors=None, alpha=0.2, lr=None, n_timesteps=float('inf'), filter_list=['']):
+def plot_rewards(folder, window_size=100, colors=None, alpha=0.2, lr=None, n_timesteps=float('inf'), filter_list=[''], filter_full_dir=0):
     data = []
     
     filter_ = ''
@@ -74,7 +74,10 @@ def plot_rewards(folder, window_size=100, colors=None, alpha=0.2, lr=None, n_tim
     
     for filter_i in filter_list:
         folder[0]
-        path = './logs/' + folder[0] + '/' + '*' + filter_i + '*/'
+        if filter_full_dir == 0:
+            path = './logs/' + folder[0] + '/' + '*' + filter_i + '*/'
+        else:
+            path = './logs/' + folder[0] + '/' + filter_i + '/'
         names = []
         agents_i = glob.glob(path)
         agents += agents_i
@@ -172,7 +175,13 @@ def plot_rewards(folder, window_size=100, colors=None, alpha=0.2, lr=None, n_tim
         t2,p2 = t_test_for_mean(mean_diff,std1,std2,window_size)
         print('t:',t2,' p:',1-p2)
         print('3000000:',average[0][ind1],average[1][ind2])        
-
+    
+    if 1:
+    # the maximum average and at
+        query = 100000
+        for i in np.arange(len(data)):
+            ind1 = find_first_ind_after_n(query,step_cum[i])
+            print(lr[i],ind1,': ',average[i][ind1],'BestBefore: ',np.nanmax(average[i][:ind1]))
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -184,5 +193,6 @@ if __name__ == '__main__':
     parser.add_argument('--alpha', type=float, default=0.15)
     parser.add_argument('--n_steps', type=float, default=1e7)
     parser.add_argument('--filter', nargs='+', type=str, default=[''])
+    parser.add_argument('--filter_full_dir', type=int,default=0)
     args = parser.parse_args()
-    plot_rewards(args.folder, args.window_size, args.colors, args.alpha, args.lr, args.n_steps, args.filter)
+    plot_rewards(args.folder, args.window_size, args.colors, args.alpha, args.lr, args.n_steps, args.filter, args.filter_full_dir)

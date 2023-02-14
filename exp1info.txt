@@ -1,0 +1,9 @@
+['a2c_c_7en4', 'bdp_bdp_7en3', 'trpobdp_bdp_7en4', 'ppo_c_7en4', 'trpo_c_7en4', 'bdp_bdp_7en4']
+['trpo_c_7en4', 'ppo_c_7en4', 'a2c_c_7en4', 'bdp_bdp_7en3', 'trpobdp_bdp_7en4', 'bdp_bdp_7en4']
+['bdp_bdp_7en4', 'a2c_c_7en4', 'bdp_bdp_7en3', 'ppo_c_7en4', 'trpobdp_bdp_7en4', 'trpo_c_7en4']
+bdp_bdp 9802 :  8.245488455544441 BestBefore:  8.281195036963021
+a2c_c 7171 :  11.678285601398624 BestBefore:  13.417198132867137
+bdp_bdp_7e-3 8008 :  10.781582105894122 BestBefore:  11.016231691308683
+ppo_c 6805 :  9.985531688311688 BestBefore:  10.298070565434582
+trpobdp_bdp 10033 :  39.483217020979005 BestBefore:  40.61516170529467
+trpo_c 8042 :  56.36356935464541 BestBefore:  57.0483482337663
