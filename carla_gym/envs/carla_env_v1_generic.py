@@ -186,6 +186,12 @@ class CarlaGymEnv(gym.Env):
             action_low = np.array([-1.,-1.])
             action_high = np.array([1.,1.])
             self.action_space = gym.spaces.Box(low=action_low, high=action_high, dtype=np.float32)
+        elif self.mode == 'end2end':
+            """directly compute the control command"""
+            assert self.short_hard_mode == 1, "end to end mode must work in short hard mode"
+            action_low = np.array([-1.])
+            action_high = np.array([1.])
+            self.action_space = gym.spaces.Box(low=action_low, high=action_high, dtype=np.float32)
 
         # [cn, ..., c1, c0, normalized yaw angle, normalized speed error] => ci: coefficients
         self.state = np.zeros_like(self.observation_space.sample())
@@ -669,7 +675,7 @@ class CarlaGymEnv(gym.Env):
 #        print(action)
 
         
-        
+
         if self.bdpl_path_list is None:
             # so external_sampler not called, call it now
             # to be compatible with original.
@@ -732,8 +738,19 @@ class CarlaGymEnv(gym.Env):
             fpath = self.bdpl_path_list[action]
             self.lanechange = self.tmp_lanechange[action]
             off_the_road = self.tmp_off_the_road[action]
+        elif self.mode == 'end2end':
+            assert len(self.bdpl_path_list) == 3,"for fair comparison, end to end is a lazy implementation. use 3 traj to compute the vehicle_ahead"
+            action = action[0]
+            if action < -1./3:
+                fpath = self.bdpl_path_list[1]#left
+            elif action > 1./3:
+                fpath = self.bdpl_path_list[2]#right
+            else:
+                fpath = self.bdpl_path_list[0]
         else:
             raise NotImplementedError
+        
+
         self.motionPlanner.update_self_path(fpath)
         
         
@@ -776,6 +793,10 @@ class CarlaGymEnv(gym.Env):
 
             # control = self.vehicleController.run_step(cmdSpeed, cmdWP)  # calculate control
             control = self.vehicleController.run_step_2_wp(cmdSpeed, cmdWP, cmdWP2)  # calculate control
+            
+            if self.mode == "end2end":
+                control.steer = float(action)
+            
             self.steer_pre = control.steer
             self.ego.apply_control(control)  # apply control
 
@@ -956,15 +977,16 @@ class CarlaGymEnv(gym.Env):
             if self.verbosity: print('REWARD'.ljust(15), '{:+8.6f}'.format(reward))
             return self.state, reward, done, {'reserved': 0}
 
-        elif off_the_road and self.is_finish_traj: #does not consider off road when doing one_step
-            # print('off road happened!')
-            reward = self.off_the_road_penalty
-            # done = True
-            self.eps_rew += reward
-            # print('eps rew: ', self.n_step, self.eps_rew)
-            if self.verbosity: print('REWARD'.ljust(15), '{:+8.6f}'.format(reward))
-            return self.state, reward, done, {'reserved': 0}
-        
+        elif self.is_finish_traj:
+            if off_the_road: #does not consider off road when doing one_step
+                # print('off road happened!')
+                reward = self.off_the_road_penalty
+                # done = True
+                self.eps_rew += reward
+                # print('eps rew: ', self.n_step, self.eps_rew)
+                if self.verbosity: print('REWARD'.ljust(15), '{:+8.6f}'.format(reward))
+                return self.state, reward, done, {'reserved': 0}
+
         # reset the env for short hard mode
         self.step_counter += 1
         self.global_steps += 1

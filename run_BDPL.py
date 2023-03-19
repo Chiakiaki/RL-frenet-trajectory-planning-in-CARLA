@@ -179,7 +179,7 @@ if __name__ == '__main__':
             model = PPO2(policy[cfg.POLICY.NET], env, verbose=1, learning_rate = args.learning_rate, n_steps = n_steps_ppo, model_dir=save_path,tensorboard_log=save_path, policy_kwargs={'cnn_extractor': eval(cfg.POLICY.CNN_EXTRACTOR)})
         elif cfg.POLICY.NAME == 'TRPO':
             model = TRPO(policy[cfg.POLICY.NET], env, verbose=1, timesteps_per_batch = trpo_timesteps_per_batch, model_dir=save_path,tensorboard_log=save_path, policy_kwargs={'cnn_extractor': eval(cfg.POLICY.CNN_EXTRACTOR)})#no learning_rate
-        elif cfg.POLICY.NAME =='A2C':
+        elif cfg.POLICY.NAME == 'A2C':
             model = A2C(policy[cfg.POLICY.NET], env, verbose=1, learning_rate = args.learning_rate, n_steps = n_steps_a2c, model_dir=save_path,tensorboard_log=save_path, policy_kwargs={'cnn_extractor': eval(cfg.POLICY.CNN_EXTRACTOR)})
         elif cfg.POLICY.NAME == 'TRPO_BDP':
             model = TRPO_bdp(policy[cfg.POLICY.NET], env, verbose=1, timesteps_per_batch = trpo_timesteps_per_batch, model_dir=save_path,tensorboard_log=save_path, policy_kwargs={'feature_extraction': 'mlp','cnn_extractor': eval(cfg.POLICY.CNN_EXTRACTOR)})#no learning_rate
