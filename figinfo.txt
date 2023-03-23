@@ -1,0 +1,3 @@
+['shorthard_trpobdp_bdp_9traj', 'shorthard_trpobdp_bdp_7en4', 'shorthard_trpobdp_catagorical_7en4', 'shorthard_trpobdp_bdp_15traj_1', 'shorthard_trpobdp_catagorical_7en4_3']
+trpobdp_bdp_9traj 54517 :  -5.446455354464554 BestBefore:  0.0
+trpobdp_bdp 52534 :  -4.291570842915708 BestBefore:  0.0

@@ -46,11 +46,13 @@ def parse_args_cfgs():
     parser.add_argument('--agent_id', type=int, default=None),
     parser.add_argument('--test_dir', type=str, default=None),
     parser.add_argument('--num_timesteps', type=float, default=1e7),
+    parser.add_argument('--num_test_episode', type=int, default=10000)
     parser.add_argument('--save_path', help='Path to save trained model to', default=None, type=str)
     parser.add_argument('--log_path', help='Directory to save learning curve data.', default=None, type=str)
     parser.add_argument('--play_mode', type=int, help='Display mode: 0:off, 1:2D, 2:3D ', default=0)
     parser.add_argument('--verbosity', help='Terminal mode: 0:Off, 1:Action,Reward 2:All', default=0, type=int)
     parser.add_argument('--test', default=False, action='store_true')
+    parser.add_argument('--env_change', help='test_mode, can be None or pertubation', default='None', type=str)
     parser.add_argument('--test_model', help='test model file name', type=str, default='')
     parser.add_argument('--test_last', help='test model best or last?', action='store_true', default=False)
     parser.add_argument('--carla_host', metavar='H', default='127.0.0.1', help='IP of the host server (default: 127.0.0.1)')
@@ -88,8 +90,8 @@ def parse_args_cfgs():
     cfg.EXP_GROUP_PATH = '/'.join(args.cfg_file.split('/')[1:-1])  # remove 'cfgs' and 'xxxx.yaml'
 
     # visualize all test scenarios
-    if args.test:
-        args.play_mode = True
+#    if args.test:
+#        args.play_mode = True
 
     return args, cfg
 
@@ -98,7 +100,7 @@ if __name__ == '__main__':
     args, cfg = parse_args_cfgs()
     trpo_timesteps_per_batch = args.trpo_timesteps_per_batch
     print('Env is starting')
-    env = gym.make(args.env, mode = args.planner_mode, is_finish_traj = args.is_finish_traj, use_lidar = args.use_lidar, num_traj = args.num_traj, scale_yaw = args.scale_yaw, scale_v = args.scale_v, debug = args.bdp_debug, short_hard = args.short_hard)
+    env = gym.make(args.env, mode = args.planner_mode, is_finish_traj = args.is_finish_traj, use_lidar = args.use_lidar, num_traj = args.num_traj, scale_yaw = args.scale_yaw, scale_v = args.scale_v, debug = args.bdp_debug, short_hard = args.short_hard, env_change = args.env_change)
     if args.play_mode:
         env.enable_auto_render()
     env.begin_modules(args)
@@ -212,8 +214,10 @@ if __name__ == '__main__':
     else:  # test
         if args.agent_id is not None:
             save_path = 'logs/agent_{}/models/'.format(args.agent_id)
+            env = Monitor(env, 'logs/agent_{}/'.format(args.agent_id))
         elif args.test_dir is not None:
             save_path = 'logs/' + args.test_dir + '/models/'
+            env = Monitor(env, 'logs/' + args.test_dir + '/test' + args.env_change)
 
         if args.test_model == '':
             best_last = 'best'
@@ -224,6 +228,7 @@ if __name__ == '__main__':
             args.test_model = best_last + '_{}'.format(best_s[-1])
 
         model_dir = save_path + args.test_model  # model save/load directory
+
         print('{} is Loading...'.format(args.test_model))
         if cfg.POLICY.NAME == 'DDPG':
             model = DDPG.load(model_dir)
@@ -247,8 +252,10 @@ if __name__ == '__main__':
         print('Model is loaded')
         try:
             obs = env.reset()
+            tmp_cnt = 0
             while True:
-                
+                if tmp_cnt >= args.num_test_episode:
+                    break
                 
                 if cfg.POLICY.NAME == 'TRPO_BDP' or cfg.POLICY.NAME == 'BDP':
                     obs = np.array(obs)
@@ -260,9 +267,11 @@ if __name__ == '__main__':
                     action, _states = model.predict(obs)
                 obs, rewards, done, info = env.step(action)
                 
-                
-                env.render()
+                if args.play_mode != 0:
+                    env.render()
                 if done:
                     obs = env.reset()
+                    tmp_cnt += 1
+                    print(tmp_cnt,'/',args.num_test_episode,' finished')
         finally:
             env.destroy()

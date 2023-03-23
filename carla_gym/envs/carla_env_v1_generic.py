@@ -85,11 +85,13 @@ class CarlaGymEnv(gym.Env):
         self.scale_v = kwargs.pop('scale_v',0.01)
         self.debug_bdp = kwargs.pop('debug',0)
         self.short_hard_mode = kwargs.pop('short_hard',0)
+        self.env_change = kwargs.pop('env_change','None')#now can be 'pertubation'
         self.restart_every = 100
         self.step_counter = 0
         self.global_steps = 0
         self.is_save_log = False
         self.log_dir = None
+        self.update_tf_list = 1
         assert self.num_traj % 3 == 0, "currently need num_traj as integer time of 3"
         
 
@@ -587,15 +589,36 @@ class CarlaGymEnv(gym.Env):
             return bdpl_path_list, tmp_lanechange, tmp_off_the_road
         
         if self.short_hard_mode == 1:
-            if self.num_traj == 3:
-                Vf_n_list = [-1]
-                Tf_list = [3.2]
-            elif self.num_traj == 9:
-                Vf_n_list = [-2,-1,0]
-                Tf_list = [3.2,4.1,5]
-            elif self.num_traj == 15:
-                Vf_n_list = [-3,-2,-1,0,1]
-                Tf_list = [3.2,4.1,5,5.9,6.8]                
+            if self.env_change == 'pertubation':
+                if self.update_tf_list == 1:#we wish the traj generation parameter is not changed too frequently
+                    if self.num_traj == 3:
+                        Vf_n_list = [-1]
+                        Tf_list = list(np.sort(np.random.choice(np.arange(32,69), 1, replace=False)/10.))
+                    elif self.num_traj == 9:
+                        Vf_n_list = [-2,-1,0]
+                        Tf_list = list(np.sort(np.random.choice(np.arange(32,69), 3, replace=False)/10.))
+                    elif self.num_traj == 15:
+                        Vf_n_list = [-3,-2,-1,0,1]
+                        Tf_list = list(np.sort(np.random.choice(np.arange(32,69), 5, replace=False)/10.))
+                    self.Tf_list = Tf_list
+                    self.update_tf_list = 0
+                else:
+                    Tf_list = self.Tf_list
+            
+            elif self.env_change == 'None':
+                if self.num_traj == 3:
+                    Vf_n_list = [-1]
+                    Tf_list = [3.2]
+                elif self.num_traj == 9:
+                    Vf_n_list = [-2,-1,0]
+                    Tf_list = [3.2,4.1,5]
+                elif self.num_traj == 15:
+                    Vf_n_list = [-3,-2,-1,0,1]
+                    Tf_list = [3.2,4.1,5,5.9,6.8]
+            else:
+                raise NotImplementedError
+
+                            
         else:
             if self.num_traj == 3:
                 Vf_n_list = [-1]
@@ -1001,7 +1024,7 @@ class CarlaGymEnv(gym.Env):
     
 
     def reset(self):
-        
+        self.update_tf_list = 1
         
         self.step_counter = 0
         self.init_s = self.world_module.init_s
