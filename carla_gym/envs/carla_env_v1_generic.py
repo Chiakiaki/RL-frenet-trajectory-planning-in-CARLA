@@ -766,10 +766,13 @@ class CarlaGymEnv(gym.Env):
             action = action[0]
             if action < -1./3:
                 fpath = self.bdpl_path_list[1]#left
+                off_the_road = self.tmp_off_the_road[1]
             elif action > 1./3:
                 fpath = self.bdpl_path_list[2]#right
+                off_the_road = self.tmp_off_the_road[2]
             else:
                 fpath = self.bdpl_path_list[0]
+                off_the_road = self.tmp_off_the_road[0]
         else:
             raise NotImplementedError
         
@@ -993,7 +996,7 @@ class CarlaGymEnv(gym.Env):
             # print('Finished the race')
             # reward = 10
             done = True
-            if off_the_road:
+            if off_the_road:#TODO: to be deleted for shorthard mode
                 reward = self.off_the_road_penalty
             self.eps_rew += reward
             # print('eps rew: ', self.n_step, self.eps_rew)
