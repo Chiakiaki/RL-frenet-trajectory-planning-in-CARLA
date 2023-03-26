@@ -103,13 +103,18 @@ def plot_rewards(args,folder, window_size=100, colors=None, alpha=0.2, lr=None, 
         agents += agents_i
     agents = list(set(agents))
         
-    for i in agents:
-        names.append(i.split('/')[-2])#the last folder
+
     
 
     
     for i in agents:
-        data.append(pd.read_csv(i+'/monitor.csv', skiprows=1))    
+        if len(args.file_name) == 1:
+            names.append(i.split('/')[-2])#the last folder
+        for fn in args.file_name:
+            if len(args.file_name) > 1:
+                names.append(i.split('/')[-2]+'_'+fn)#the last folder
+            data.append(pd.read_csv(i+'/'+fn, skiprows=1))
+
 
     average = []
     std_dev = []
@@ -154,7 +159,7 @@ def plot_rewards(args,folder, window_size=100, colors=None, alpha=0.2, lr=None, 
             
             
         if colors is None:
-            colors = [np.random.rand(3, ) for x in agents]
+            colors = [np.random.rand(3, ) for x in names]
     
         for i in range(len(lr)):
             plt.plot(step_cum[i], average[i], '-', color=colors[i])
@@ -236,5 +241,6 @@ if __name__ == '__main__':
     parser.add_argument('--filter', nargs='+', type=str, default=[''])
     parser.add_argument('--filter_full_dir', type=int,default=0)
     parser.add_argument('--plot_collision', type=int,default=0)
+    parser.add_argument('--file_name', nargs='+', type=str,default=["monitor.csv"])
     args = parser.parse_args()
     plot_rewards(args, args.folder, args.window_size, args.colors, args.alpha, args.lr, args.n_steps, args.filter, args.filter_full_dir)

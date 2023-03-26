@@ -589,7 +589,7 @@ class CarlaGymEnv(gym.Env):
             return bdpl_path_list, tmp_lanechange, tmp_off_the_road
         
         if self.short_hard_mode == 1:
-            if self.env_change == 'pertubation':
+            if self.env_change == 'pertubation_old':
                 if self.update_tf_list == 1:#we wish the traj generation parameter is not changed too frequently
                     if self.num_traj == 3:
                         Vf_n_list = [-1]
@@ -604,7 +604,23 @@ class CarlaGymEnv(gym.Env):
                     self.update_tf_list = 0
                 else:
                     Tf_list = self.Tf_list
-            
+            elif self.env_change == 'pertubation':
+                if self.update_tf_list == 1:#we wish the traj generation parameter is not changed too frequently
+                    if self.num_traj == 3:
+                        Vf_n_list = [-1]
+                        Tf_list = list(np.random.choice(np.arange(32,69), 5, replace=False)/10.)#do not use sort, as it show no difference
+                    elif self.num_traj == 9:
+                        Vf_n_list = [-2,-1,0]
+                        Tf_list = list(np.random.choice(np.arange(32,69), 5, replace=False)/10.)
+                    elif self.num_traj == 15:
+                        Vf_n_list = [-3,-2,-1,0,1]
+                        Tf_list = list(np.random.choice(np.arange(32,69), 5, replace=False)/10.)
+                    self.Tf_list = Tf_list
+                    self.update_tf_list = 0
+                else:
+                    Tf_list = self.Tf_list
+                
+                
             elif self.env_change == 'None':
                 if self.num_traj == 3:
                     Vf_n_list = [-1]

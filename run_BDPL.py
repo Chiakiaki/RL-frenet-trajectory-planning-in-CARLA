@@ -46,7 +46,7 @@ def parse_args_cfgs():
     parser.add_argument('--agent_id', type=int, default=None),
     parser.add_argument('--test_dir', type=str, default=None),
     parser.add_argument('--num_timesteps', type=float, default=1e7),
-    parser.add_argument('--num_test_episode', type=int, default=10000)
+    parser.add_argument('--num_test_episode', type=int, default=2200)
     parser.add_argument('--save_path', help='Path to save trained model to', default=None, type=str)
     parser.add_argument('--log_path', help='Directory to save learning curve data.', default=None, type=str)
     parser.add_argument('--play_mode', type=int, help='Display mode: 0:off, 1:2D, 2:3D ', default=0)
@@ -261,7 +261,9 @@ if __name__ == '__main__':
                     obs = np.array(obs)
                     ac_candidates,n_ac_candidates = env.external_sampler()
                     action, vpred, _states, prob, goodness = model.step(obs.reshape(-1, *obs.shape),ac_candidates, None, None, debug1=True)
-                    action = action[0][0]
+#                    action = action[0][0]
+#                    print('max:',np.argmax(goodness),' sampling:',action[0][0])
+                    action = np.argmax(goodness)
                     # remarks: in bdp, the action is actually action_idx, does not need clipping
                 else:
                     action, _states = model.predict(obs)
