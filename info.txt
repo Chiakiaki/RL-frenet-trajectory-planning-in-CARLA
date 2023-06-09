@@ -1,0 +1,49 @@
+['shorthard_trpobdp_bdp_7en4', 'shorthard_trpobdp_catagorical_7en4']
+t: 26.007288043728973  p: 1.0
+best: -4.256574342565743 -6.064393560643936
+t: 26.418921819274185  p: 1.0
+3000000: -4.291570842915708 -6.126387361263873
+trpobdp_bdp 52534 :  -4.291570842915708 BestBefore:  -4.271572842715728
+trpobdp_catagorical 57548 :  -6.126387361263873 BestBefore:  -6.064393560643936
+['shorthard_trpobdp_bdp_7en4', 'shorthard_trpo_catagorical_7en4', 'shorthard_trpobdp_catagorical_7en4']
+trpobdp_bdp 52534 :  -4.291570842915708 BestBefore:  -4.271572842715728
+trpo_catagorical 47934 :  -4.6205379462053795 BestBefore:  -4.4655534446555345
+trpobdp_catagorical 57548 :  -6.126387361263873 BestBefore:  -6.064393560643936
+['shorthard_trpobdp_bdp_7en4', 'shorthard_trpobdp_catagorical_7en4']
+t: 26.007288043728973  p: 1.0
+best: -4.256574342565743 -6.064393560643936
+t: 26.418921819274185  p: 1.0
+3000000: -4.291570842915708 -6.126387361263873
+trpobdp_bdp 52534 :  -4.291570842915708 BestBefore:  -4.271572842715728
+trpobdp_catagorical 57548 :  -6.126387361263873 BestBefore:  -6.064393560643936
+['shorthard_trpobdp_bdp_7en4', 'shorthard_trpobdp_catagorical_7en4']
+['shorthard_trpobdp_bdp_7en4', 'shorthard_trpo_c_7en4', 'shorthard_sac_end2end', 'shorthard_ddpg_params', 'shorthard_sac_params_7en4', 'shorthard_a2c_c_7en4']
+trpobdp_bdp 52534 :  -4.291570842915708 BestBefore:  0.0
+trpo_c 47934 :  -4.6205379462053795 BestBefore:  0.0
+error ind too large
+sac_end2end 72323 :  -7.2822717728227175 BestBefore:  0.0
+ddpg_params 50914 :  -4.998500149985001 BestBefore:  0.0
+sac_params 49565 :  -5.158484151584841 BestBefore:  0.0
+a2c_c 55379 :  -5.219478052194781 BestBefore:  0.0
+['shorthard_trpobdp_bdp_7en4', 'shorthard_trpo_c_7en4', 'shorthard_sac_end2end', 'shorthard_ddpg_params', 'shorthard_sac_params_7en4', 'shorthard_a2c_c_7en4']
+trpobdp_bdp 52534 :  -4.291570842915708 BestBefore:  0.0
+trpo_c 47934 :  -4.6205379462053795 BestBefore:  0.0
+error ind too large
+sac_end2end 72323 :  -7.2822717728227175 BestBefore:  0.0
+ddpg_params 50914 :  -4.998500149985001 BestBefore:  0.0
+sac_params 49565 :  -5.158484151584841 BestBefore:  0.0
+a2c_c 55379 :  -5.219478052194781 BestBefore:  0.0
+['shorthard_trpobdp_bdp_7en4', 'shorthard_trpobdp_bdp_9traj', 'shorthard_trpobdp_bdp_15traj', 'shorthard_trpo_c_7en4', 'shorthard_trpo_c_9traj', 'shorthard_trpo_c_15traj']
+trpobdp_bdp 52534 :  -4.291570842915708 BestBefore:  0.0
+trpobdp_bdp_9traj 54517 :  -5.446455354464554 BestBefore:  0.0
+trpobdp_bdp_15traj 57123 :  -5.4914508549145085 BestBefore:  0.0
+trpo_c 47934 :  -4.6205379462053795 BestBefore:  0.0
+trpo_c_9traj 53517 :  -5.358464153584642 BestBefore:  0.0
+trpo_c_15traj 55899 :  -5.794420557944205 BestBefore:  0.0
+['shorthard_trpobdp_bdp_7en4', 'shorthard_trpobdp_c_7en4']
+t: 26.007288043728973  p: 1.0
+best: -4.256574342565743 -6.064393560643936
+t: 26.418921819274185  p: 1.0
+3000000: -4.291570842915708 -6.126387361263873
+trpobdp_bdp 52534 :  -4.291570842915708 BestBefore:  0.0
+trpobdp_c 57548 :  -6.126387361263873 BestBefore:  0.0

@@ -210,7 +210,6 @@ if __name__ == '__main__':
     # --------------------------------------------------------------------------------------------------------------------"""
     # ------------------------------------------------Test----------------------------------------------------------------"""
     # --------------------------------------------------------------------------------------------------------------------"""
-
     else:  # test
         if args.agent_id is not None:
             save_path = 'logs/agent_{}/models/'.format(args.agent_id)
@@ -218,46 +217,52 @@ if __name__ == '__main__':
         elif args.test_dir is not None:
             save_path = 'logs/' + args.test_dir + '/models/'
             env = Monitor(env, 'logs/' + args.test_dir + '/test' + args.env_change)
-
-        if args.test_model == '':
-            best_last = 'best'
-            if args.test_last:
-                best_last = 'step'
-            best_s = [int(best[5:-4])for best in os.listdir(save_path) if best_last in best]
-            best_s.sort()
-            args.test_model = best_last + '_{}'.format(best_s[-1])
-
-        model_dir = save_path + args.test_model  # model save/load directory
-
-        print('{} is Loading...'.format(args.test_model))
-        if cfg.POLICY.NAME == 'DDPG':
-            model = DDPG.load(model_dir)
-            model.action_noise = OrnsteinUhlenbeckActionNoise(mean=np.zeros(n_actions),
-                                                              sigma=np.zeros(n_actions))
-            model.param_noise = None
-        elif cfg.POLICY.NAME == 'PPO2':
-            model = PPO2.load(model_dir)
-        elif cfg.POLICY.NAME == 'SAC':
-            model = SAC.load(model_dir)
-        elif cfg.POLICY.NAME == 'TRPO':
-            model = TRPO.load(model_dir)
-        elif cfg.POLICY.NAME == 'A2C':
-            model = A2C.load(model_dir)
-        elif cfg.POLICY.NAME == 'TRPO_BDP':
-            model = TRPO_bdp.load(model_dir)
+        if args.planner_mode == 'mobil':
+            # no loadable models
+            pass
         else:
-            print(cfg.POLICY.NAME)
-            raise Exception('Algorithm name is not defined!')
-
-        print('Model is loaded')
+            #load models
+            if args.test_model == '':
+                best_last = 'best'
+                if args.test_last:
+                    best_last = 'step'
+                best_s = [int(best[5:-4])for best in os.listdir(save_path) if best_last in best]
+                best_s.sort()
+                args.test_model = best_last + '_{}'.format(best_s[-1])
+    
+            model_dir = save_path + args.test_model  # model save/load directory
+            print('{} is Loading...'.format(args.test_model))
+            
+            if cfg.POLICY.NAME == 'DDPG':
+                model = DDPG.load(model_dir)
+                model.action_noise = OrnsteinUhlenbeckActionNoise(mean=np.zeros(n_actions),
+                                                                  sigma=np.zeros(n_actions))
+                model.param_noise = None
+            elif cfg.POLICY.NAME == 'PPO2':
+                model = PPO2.load(model_dir)
+            elif cfg.POLICY.NAME == 'SAC':
+                model = SAC.load(model_dir)
+            elif cfg.POLICY.NAME == 'TRPO':
+                model = TRPO.load(model_dir)
+            elif cfg.POLICY.NAME == 'A2C':
+                model = A2C.load(model_dir)
+            elif cfg.POLICY.NAME == 'TRPO_BDP':
+                model = TRPO_bdp.load(model_dir)
+            else:
+                print(cfg.POLICY.NAME)
+                raise Exception('Algorithm name is not defined!')
+    
+            print('Model is loaded')
         try:
             obs = env.reset()
             tmp_cnt = 0
             while True:
                 if tmp_cnt >= args.num_test_episode:
                     break
-                
-                if cfg.POLICY.NAME == 'TRPO_BDP' or cfg.POLICY.NAME == 'BDP':
+                if args.planner_mode == 'mobil':
+                    # this is purely rule-based
+                    action = None
+                elif cfg.POLICY.NAME == 'TRPO_BDP' or cfg.POLICY.NAME == 'BDP':
                     obs = np.array(obs)
                     ac_candidates,n_ac_candidates = env.external_sampler()
                     action, vpred, _states, prob, goodness = model.step(obs.reshape(-1, *obs.shape),ac_candidates, None, None, debug1=True)

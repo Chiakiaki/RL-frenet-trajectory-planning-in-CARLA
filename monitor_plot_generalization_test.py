@@ -110,8 +110,8 @@ def plot_rewards(args,folder, window_size=100, colors=None, alpha=0.2, lr=None, 
         for fn in args.file_name:
             if len(args.file_name) > 1:
                 names.append(i.split('/')[-2]+'_'+fn)#the last folder
-            data.append(pd.read_csv(i+'/'+fn, skiprows=1))
-
+            data.append(pd.read_csv(i+'/'+fn, skiprows=1))    
+        
     agents = list(set(agents))
         
 
@@ -160,13 +160,29 @@ def plot_rewards(args,folder, window_size=100, colors=None, alpha=0.2, lr=None, 
             step_cum.append(temp_step)
 
     
-        plt.figure(figsize=(12, 8))        
+        plt.figure(figsize=(6, 6))        
         
             
         if colors is None:
             color_use = [np.random.rand(3, ) for x in names]
     
-
+        def pertubation_plot(average,lr,color):
+            y = [i[2020] - (-10) for i in average]
+            print(- 10 + np.array(y))
+            tick_label = [15,15,15,15,9,9,9,9,3,3,3,3]
+            x = [1,1,2,2,3,3,4,4,5,5,6,6]
+            plt.bar(x[0:1],y[0:1],bottom=-10,color=['orange'],label='trpobdp_bdp')
+            plt.bar(x[2:3],y[2:3],bottom=-10,color=['green'],label='trpo_c')
+            plt.bar(x[0:1],y[0:1],bottom=-10,color=['gray'],label='lost in generalization')
+            plt.bar(x,y,bottom=-10,tick_label=tick_label,color=['gray','orange','gray','green','gray','orange','gray','green','gray','orange','gray','green'])
+        if 1:
+            pertubation_plot(average,lr,color_use)
+            plt.ylim([-8,-3])
+            plt.xlabel('Number of Trained Candidate Trajectories or Behaviors')
+            plt.ylabel('Mean Episode Reward in Test')
+            plt.legend()
+            plt.show()
+            return
     
         for i in range(len(lr)):
             plt.plot(step_cum[i], average[i], '-', color=color_use[i])
@@ -174,8 +190,7 @@ def plot_rewards(args,folder, window_size=100, colors=None, alpha=0.2, lr=None, 
                              np.add(average[i][window_size - 1:], std_dev[i]), color=color_use[i], alpha=alpha)
     
         plt.title('CARLA')
-        plt.ylim([-14.5,1])
-        plt.xlim([-1000,3300000])
+#        plt.ylim([-25,125])
         plt.xlabel('TimeSteps')
         plt.ylabel('Mean_Episode_Reward_-{}'.format(window_size))
         plt.legend(lr)
@@ -216,13 +231,10 @@ def plot_rewards(args,folder, window_size=100, colors=None, alpha=0.2, lr=None, 
     
         if 1:
         # the maximum average and at
-            if args.query_ind == -1:
-                if folder == ["v5_10vehicles"]:
-                    query = 100000
-                else:
-                    query = 3000000
+            if folder == ["v5_10vehicles"]:
+                query = 100000
             else:
-                query = args.query_ind
+                query = 3000000
 
             for i in np.arange(len(data)):
                 ind1 = find_first_ind_after_n(query,step_cum[i])
@@ -255,6 +267,5 @@ if __name__ == '__main__':
     parser.add_argument('--filter_full_dir', type=int,default=0)
     parser.add_argument('--plot_collision', type=int,default=0)
     parser.add_argument('--file_name', nargs='+', type=str,default=["monitor.csv"])
-    parser.add_argument('--query_ind', type=int, default=-1)
     args = parser.parse_args()
     plot_rewards(args, args.folder, args.window_size, args.colors, args.alpha, args.lr, args.n_steps, args.filter, args.filter_full_dir)

@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 from tools.modules import *
 from config import cfg
 from agents.local_planner.frenet_optimal_trajectory import FrenetPlanner as MotionPlanner
+from agents.local_planner.frenet_optimal_trajectory_mobil import FrenetPlanner as MotionPlanner_mobil
 from agents.low_level_controller.controller import VehiclePIDController
 from agents.tools.misc import get_speed
 from agents.low_level_controller.controller import IntelligentDriverModel
@@ -194,6 +195,9 @@ class CarlaGymEnv(gym.Env):
             action_low = np.array([-1.])
             action_high = np.array([1.])
             self.action_space = gym.spaces.Box(low=action_low, high=action_high, dtype=np.float32)
+        elif self.mode == 'mobil':
+            """this mode use 'mobil' a rule-based behavior planning machanism"""
+            pass
 
         # [cn, ..., c1, c0, normalized yaw angle, normalized speed error] => ci: coefficients
         self.state = np.zeros_like(self.observation_space.sample())
@@ -524,6 +528,72 @@ class CarlaGymEnv(gym.Env):
                                   axis=0)
 
         return lstm_obs.reshape(self.observation_space.shape[1], -1).transpose()  # state
+    
+    def get_Tf_list(self,env_change):
+        if self.short_hard_mode == 1:
+            if self.env_change == 'pertubation_old':
+                if self.update_tf_list == 1:#we wish the traj generation parameter is not changed too frequently
+                    if self.num_traj == 3:
+                        Vf_n_list = [-1]
+                        Tf_list = list(np.sort(np.random.choice(np.arange(32,69), 5, replace=False)/10.))
+                    elif self.num_traj == 9:
+                        Vf_n_list = [-2,-1,0]
+                        Tf_list = list(np.sort(np.random.choice(np.arange(32,69), 5, replace=False)/10.))
+                    elif self.num_traj == 15:
+                        Vf_n_list = [-3,-2,-1,0,1]
+                        Tf_list = list(np.sort(np.random.choice(np.arange(32,69), 5, replace=False)/10.))
+                    self.Tf_list = Tf_list
+                    self.update_tf_list = 0
+                else:
+                    Tf_list = self.Tf_list
+            elif self.env_change == 'pertubation':
+                if self.update_tf_list == 1:#we wish the traj generation parameter is not changed too frequently
+                    if self.num_traj == 3:
+                        Vf_n_list = [-1]
+                        Tf_list = list(np.random.choice(np.arange(32,69), 1, replace=False)/10.)#do not use sort, as it show no difference
+                    elif self.num_traj == 9:
+                        Vf_n_list = [-2,-1,0]
+                        Tf_list = list(np.random.choice(np.arange(32,69), 3, replace=False)/10.)
+                    elif self.num_traj == 15:
+                        Vf_n_list = [-3,-2,-1,0,1]
+                        Tf_list = list(np.random.choice(np.arange(32,69), 5, replace=False)/10.)
+                    self.Tf_list = Tf_list
+                    self.update_tf_list = 0
+                else:
+                    Tf_list = self.Tf_list
+                
+                
+            elif self.env_change == 'None':
+                if self.num_traj == 3:
+                    Vf_n_list = [-1]
+                    Tf_list = [3.2]
+                elif self.num_traj == 9:
+                    Vf_n_list = [-2,-1,0]
+                    Tf_list = [3.2,4.1,5]
+                elif self.num_traj == 15:
+                    Vf_n_list = [-3,-2,-1,0,1]
+                    Tf_list = [3.2,4.1,5,5.9,6.8]
+            else:
+                raise NotImplementedError
+
+                            
+        else:
+            if self.num_traj == 3:
+                Vf_n_list = [-1]
+                Tf_list = [5]
+            elif self.num_traj == 9:
+                Vf_n_list = [-2,-1,0]
+                Tf_list = [4.2,5,5.8]
+            elif self.num_traj == 15:
+                if self.debug_bdp == 0:
+                    Vf_n_list = [-3,-2,-1,0,1]
+                    Tf_list = [3.2,4.1,5,5.9,6.8]
+                else:
+                    Vf_n_list = [-1,-1,-1,-1,-1]
+                    Tf_list = [5,5,5,5,5]
+            else:
+                raise NotImplementedError
+        return Tf_list
 
     def external_sampler(self):
         """
@@ -588,69 +658,7 @@ class CarlaGymEnv(gym.Env):
             tmp_off_the_road = [off_the_road1,off_the_road2,off_the_road3]
             return bdpl_path_list, tmp_lanechange, tmp_off_the_road
         
-        if self.short_hard_mode == 1:
-            if self.env_change == 'pertubation_old':
-                if self.update_tf_list == 1:#we wish the traj generation parameter is not changed too frequently
-                    if self.num_traj == 3:
-                        Vf_n_list = [-1]
-                        Tf_list = list(np.sort(np.random.choice(np.arange(32,69), 1, replace=False)/10.))
-                    elif self.num_traj == 9:
-                        Vf_n_list = [-2,-1,0]
-                        Tf_list = list(np.sort(np.random.choice(np.arange(32,69), 3, replace=False)/10.))
-                    elif self.num_traj == 15:
-                        Vf_n_list = [-3,-2,-1,0,1]
-                        Tf_list = list(np.sort(np.random.choice(np.arange(32,69), 5, replace=False)/10.))
-                    self.Tf_list = Tf_list
-                    self.update_tf_list = 0
-                else:
-                    Tf_list = self.Tf_list
-            elif self.env_change == 'pertubation':
-                if self.update_tf_list == 1:#we wish the traj generation parameter is not changed too frequently
-                    if self.num_traj == 3:
-                        Vf_n_list = [-1]
-                        Tf_list = list(np.random.choice(np.arange(32,69), 5, replace=False)/10.)#do not use sort, as it show no difference
-                    elif self.num_traj == 9:
-                        Vf_n_list = [-2,-1,0]
-                        Tf_list = list(np.random.choice(np.arange(32,69), 5, replace=False)/10.)
-                    elif self.num_traj == 15:
-                        Vf_n_list = [-3,-2,-1,0,1]
-                        Tf_list = list(np.random.choice(np.arange(32,69), 5, replace=False)/10.)
-                    self.Tf_list = Tf_list
-                    self.update_tf_list = 0
-                else:
-                    Tf_list = self.Tf_list
-                
-                
-            elif self.env_change == 'None':
-                if self.num_traj == 3:
-                    Vf_n_list = [-1]
-                    Tf_list = [3.2]
-                elif self.num_traj == 9:
-                    Vf_n_list = [-2,-1,0]
-                    Tf_list = [3.2,4.1,5]
-                elif self.num_traj == 15:
-                    Vf_n_list = [-3,-2,-1,0,1]
-                    Tf_list = [3.2,4.1,5,5.9,6.8]
-            else:
-                raise NotImplementedError
-
-                            
-        else:
-            if self.num_traj == 3:
-                Vf_n_list = [-1]
-                Tf_list = [5]
-            elif self.num_traj == 9:
-                Vf_n_list = [-2,-1,0]
-                Tf_list = [4.2,5,5.8]
-            elif self.num_traj == 15:
-                if self.debug_bdp == 0:
-                    Vf_n_list = [-3,-2,-1,0,1]
-                    Tf_list = [3.2,4.1,5,5.9,6.8]
-                else:
-                    Vf_n_list = [-1,-1,-1,-1,-1]
-                    Tf_list = [5,5,5,5,5]
-            else:
-                raise NotImplementedError
+        Tf_list = self.get_Tf_list(self.env_change)
         
         self.bdpl_path_list = []
         self.tmp_lanechange = []
@@ -712,91 +720,101 @@ class CarlaGymEnv(gym.Env):
     def step(self, action=None):
         #for dev
 #        print(action)
-
-        
-
-        if self.bdpl_path_list is None:
-            # so external_sampler not called, call it now
-            # to be compatible with original.
-            self.external_sampler()
+        if self.mode == 'mobil':
+            # non learning
+            self.n_step += 1
             
-        if self.is_finish_traj == 0:# could drive off the road in such mode
-            self.bdpl_path_list = self.bdpl_path_list_with_offroad
+            temp = [self.ego.get_velocity(), self.ego.get_acceleration()]
+            speed = get_speed(self.ego)
+            acc_vec = self.ego.get_acceleration()
+            acc = math.sqrt(acc_vec.x ** 2 + acc_vec.y ** 2 + acc_vec.z ** 2)
+            psi = math.radians(self.ego.get_transform().rotation.yaw)
+            ego_state = [self.ego.get_location().x, self.ego.get_location().y, speed, acc, psi, temp,self.max_s]
+            # fpath = self.motionPlanner.run_step_single_path(ego_state, self.f_idx, df_n=action[0], Tf=5, Vf_n=action[1])
+            Tf_list = self.get_Tf_list(self.env_change)
+            fpath, fplist, best_path_idx, self.lane_change = self.motionPlanner.run_step(ego_state, self.f_idx, self.traffic_module.actors_batch, target_speed=self.targetSpeed,Tf_list=Tf_list)
             
-        temp,init_speed,traj_action_params1,ego_state = self.external_sampler_variable
-        """
-        Though action space is box, here the action passed in should be int, because,
-        in Boltzmann Distribution Policy Learning, the env.step need not return all infomation to candidate actions,
-        they just need to return some feature. The model just do 'select', not create.
-        """
-        if self.mode == 'catagorical' or self.mode == 'bdp' or self.mode == 'bdpCatagorical' or self.mode == 'combined':
-            assert type(action) is int or np.int32 or np.int64, "error action %d is not type int" % action
-            fpath = self.bdpl_path_list[action]
-            self.lanechange = self.tmp_lanechange[action]
-            off_the_road = self.tmp_off_the_road[action]
-            
-            """
-            #tmp_test_for_reconstruct_action
-            tmp_ac = traj2action(fpath,traj_action_params1)
-            x0,y0 = get_traj_x0(self.bdpl_path_list[0])#get the x0,y0
-            fpath_reconstruct = action2traj(tmp_ac,x0,y0,traj_action_params1)
-            dis = traj_distance_l2(fpath,fpath_reconstruct)
-            assert dis < 0.001
-            """
-        elif self.mode == 'ddpg_on_params':
-            #simply calculate one with action
-            fpath, self.lanechange, off_the_road = self.motionPlanner.run_step_single_path_without_update_self_path_continous_df(ego_state, self.f_idx, df_n=action[0]*1.5, Tf=5, Vf_n=action[1] -1)
-
-
-
-            #TODO: change  Vf_n, remove the '-1'
-        elif self.mode == 'ddpg':
-            #action is of the same shape with
-            x0,y0 = get_traj_x0(self.bdpl_path_list[0])#get the x0,y0
-            fpath = action2traj(action,traj_action_params1)
-            raise NotImplementedError#fpath does not have frenet state
-            
-            #an action of time length 1 will yield a trajector with lenth 2.
-            assert fpath.t == 5./self.dt
-            
-            #now judge whether it is lane_change
-            dis = [traj_distance_l2(fpath,path2) for path2 in self.bdpl_path_list_with_offroad]
-            nearest_idx = np.argmin(dis)
-            self.lanechange = self.tmp_lanechange[nearest_idx]
-            off_the_road = self.tmp_off_the_road[nearest_idx]
-            
-        elif self.mode == 'continuous_catagorical':
-            assert type(action) is np.float32 or np.float64, "error action %d is not type float" % action
-            #this code is previously inside motion planner, we move it here for equivalent
-            if action < -0.33:
-                action = 1
-            elif action > 0.33:
-                action = 2
-            else:
-                action = 0
-            fpath = self.bdpl_path_list[action]
-            self.lanechange = self.tmp_lanechange[action]
-            off_the_road = self.tmp_off_the_road[action]
-        elif self.mode == 'end2end':
-            assert len(self.bdpl_path_list) == 3,"for fair comparison, end to end is a lazy implementation. use 3 traj to compute the vehicle_ahead"
-            action = action[0]
-            if action < -1./3:
-                fpath = self.bdpl_path_list[1]#left
-                off_the_road = self.tmp_off_the_road[1]
-            elif action > 1./3:
-                fpath = self.bdpl_path_list[2]#right
-                off_the_road = self.tmp_off_the_road[2]
-            else:
-                fpath = self.bdpl_path_list[0]
-                off_the_road = self.tmp_off_the_road[0]
+            init_speed = speed = get_speed(self.ego)
+            off_the_road = False
         else:
-            raise NotImplementedError
-        
-
-        self.motionPlanner.update_self_path(fpath)
-        
-        
-        
+            # learning
+            if self.bdpl_path_list is None:
+                # so external_sampler not called, call it now
+                # to be compatible with original.
+                self.external_sampler()
+                
+            if self.is_finish_traj == 0:# could drive off the road in such mode
+                self.bdpl_path_list = self.bdpl_path_list_with_offroad
+                
+            temp,init_speed,traj_action_params1,ego_state = self.external_sampler_variable
+            """
+            Though action space is box, here the action passed in should be int, because,
+            in Boltzmann Distribution Policy Learning, the env.step need not return all infomation to candidate actions,
+            they just need to return some feature. The model just do 'select', not create.
+            """
+            if self.mode == 'catagorical' or self.mode == 'bdp' or self.mode == 'bdpCatagorical' or self.mode == 'combined':
+                assert type(action) is int or np.int32 or np.int64, "error action %d is not type int" % action
+                fpath = self.bdpl_path_list[action]
+                self.lanechange = self.tmp_lanechange[action]
+                off_the_road = self.tmp_off_the_road[action]
+                
+                """
+                #tmp_test_for_reconstruct_action
+                tmp_ac = traj2action(fpath,traj_action_params1)
+                x0,y0 = get_traj_x0(self.bdpl_path_list[0])#get the x0,y0
+                fpath_reconstruct = action2traj(tmp_ac,x0,y0,traj_action_params1)
+                dis = traj_distance_l2(fpath,fpath_reconstruct)
+                assert dis < 0.001
+                """
+            elif self.mode == 'ddpg_on_params':
+                #simply calculate one with action
+                fpath, self.lanechange, off_the_road = self.motionPlanner.run_step_single_path_without_update_self_path_continous_df(ego_state, self.f_idx, df_n=action[0]*1.5, Tf=5, Vf_n=action[1] -1)
+    
+    
+    
+                #TODO: change  Vf_n, remove the '-1'
+            elif self.mode == 'ddpg':
+                #action is of the same shape with
+                x0,y0 = get_traj_x0(self.bdpl_path_list[0])#get the x0,y0
+                fpath = action2traj(action,traj_action_params1)
+                raise NotImplementedError#fpath does not have frenet state
+                
+                #an action of time length 1 will yield a trajector with lenth 2.
+                assert fpath.t == 5./self.dt
+                
+                #now judge whether it is lane_change
+                dis = [traj_distance_l2(fpath,path2) for path2 in self.bdpl_path_list_with_offroad]
+                nearest_idx = np.argmin(dis)
+                self.lanechange = self.tmp_lanechange[nearest_idx]
+                off_the_road = self.tmp_off_the_road[nearest_idx]
+                
+            elif self.mode == 'continuous_catagorical':
+                assert type(action) is np.float32 or np.float64, "error action %d is not type float" % action
+                #this code is previously inside motion planner, we move it here for equivalent
+                if action < -0.33:
+                    action = 1
+                elif action > 0.33:
+                    action = 2
+                else:
+                    action = 0
+                fpath = self.bdpl_path_list[action]
+                self.lanechange = self.tmp_lanechange[action]
+                off_the_road = self.tmp_off_the_road[action]
+            elif self.mode == 'end2end':
+                assert len(self.bdpl_path_list) == 3,"for fair comparison, end to end is a lazy implementation. use 3 traj to compute the vehicle_ahead"
+                action = action[0]
+                if action < -1./3:
+                    fpath = self.bdpl_path_list[1]#left
+                    off_the_road = self.tmp_off_the_road[1]
+                elif action > 1./3:
+                    fpath = self.bdpl_path_list[2]#right
+                    off_the_road = self.tmp_off_the_road[2]
+                else:
+                    fpath = self.bdpl_path_list[0]
+                    off_the_road = self.tmp_off_the_road[0]
+            else:
+                raise NotImplementedError
+            self.motionPlanner.update_self_path(fpath)
         
         wps_to_go = len(fpath.t) - 3  # -2 bc len gives # of items not the idx of last item + 2wp controller is used
         
@@ -1137,8 +1155,11 @@ class CarlaGymEnv(gym.Env):
                 # To visualize point clouds
                 self.world_module.points_to_draw['wp {}'.format(wp.id)] = [wp.transform.location, 'COLOR_CHAMELEON_0']
             np.save('road_maps/global_route_town04', self.global_route)
-
-        self.motionPlanner = MotionPlanner()
+        
+        if self.mode == 'mobil':
+            self.motionPlanner = MotionPlanner_mobil()
+        else:
+            self.motionPlanner = MotionPlanner()
 
         # Start Modules
         self.motionPlanner.start(self.global_route)
