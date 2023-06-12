@@ -646,7 +646,7 @@ class FrenetPlanner:
         tmp[1,2] = sur_actos['Right Down']['Exist']
         tmp[0,0] = sur_actos['Left Up']['Exist']
         tmp[1,0] = sur_actos['Left Down']['Exist']
-        self.display(tmp)
+#        self.display(tmp)
         return
     
     def calc_frenet_paths(self, f_state, other_actors, target_speed=30 / 3.6,Tf_list = None):
