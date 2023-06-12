@@ -78,8 +78,7 @@ done
 
 # ===================================
 cd ~/RL-frenet-trajectory-planning-in-CARLA/
-python3 ./run_BDPL.py -p $port --tm_port $port_tm --cfg_file=tools/shorthard/config_mobil.yaml --env=CarlaGymEnv-v5 --play_mode=0 --planner_mode=mobil --test --test_dir /v5_10vehicles/mobil
-
+python3 ./run_BDPL.py -p $port --tm_port $port_tm --cfg_file=tools/cfgs_10vehicles/config_mobil_2400len.yaml --env=CarlaGymEnv-v5 --play_mode=0 --planner_mode=mobil --test --test_dir /v5_10vehicles/mobil --is_finish_traj=0 --use_lidar=1 --short_hard=1
 
 #now close the server pid
 tmp=$(ps | grep CarlaUE4-Linux)

@@ -174,8 +174,11 @@ def plot_rewards(args,folder, window_size=100, colors=None, alpha=0.2, lr=None, 
                              np.add(average[i][window_size - 1:], std_dev[i]), color=color_use[i], alpha=alpha)
     
         plt.title('CARLA')
-        plt.ylim([-14.5,1])
-        plt.xlim([-1000,3300000])
+        if folder == ["v5_10vehicles"]:
+            pass
+        else:
+            plt.ylim([-14.5,1])
+            plt.xlim([-1000,3300000])
         plt.xlabel('TimeSteps')
         plt.ylabel('Mean_Episode_Reward_-{}'.format(window_size))
         plt.legend(lr)

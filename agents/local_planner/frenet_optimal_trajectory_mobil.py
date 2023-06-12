@@ -484,7 +484,7 @@ class FrenetPlanner:
             V2_ = None
             ae_ = self.idm_acceleration(ego_s_, ego_v_, tv)
         
-        print(lane_,':',ae_-ae,s2_,s2,v2,pt)
+#        print(lane_,':',ae_-ae,s2_,s2,v2,pt)
         return ae, ae_
 
 
@@ -666,8 +666,13 @@ class FrenetPlanner:
 
         # generate path to each offset goal
         path_id = 0
-        for di in [d-self.LANE_WIDTH, d, d+self.LANE_WIDTH]:
-            print(d)
+        
+        # here we need to make di end at the center of a lane
+        d_tmp = min([-self.LANE_WIDTH,0,self.LANE_WIDTH,2*self.LANE_WIDTH], key=lambda x:abs(x-d))
+        d_targets = [d_tmp-self.LANE_WIDTH, d_tmp, d_tmp+self.LANE_WIDTH]
+
+        for di in d_targets:
+            
             #avoid off-road planning
             if di > self.LANE_WIDTH*2 + 1 or di < - self.LANE_WIDTH - 1:
                 continue
