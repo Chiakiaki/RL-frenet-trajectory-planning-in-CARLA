@@ -1,0 +1,301 @@
+#!/usr/bin/env python3
+"""
+Standalone Stable-Baselines3/PyTorch runner for the BDP/TRPO candidate-action
+planner.
+
+This file intentionally does not modify the original TensorFlow Stable
+Baselines implementation.  The migration strategy is:
+
+1. Keep the existing CARLA/Frenet environment and its ``external_sampler()``.
+2. Wrap it as a Gymnasium environment for SB3.
+3. Put the sampled candidate trajectories into the observation.
+4. Train a discrete SB3 policy whose logits are produced by a PyTorch
+   state-action goodness network, matching the old Boltzmann candidate scoring
+   idea from ``BDPL``/``TRPO_bdp``.
+
+The implementation is split under ``agents/reinforcement_learning/sb3_bdp``:
+
+    callbacks.py  checkpoint callback
+    envs.py       CARLA/generic Gymnasium candidate-action wrappers
+    model.py      SB3 TRPO/PPO factory
+    policies.py   PyTorch BDP Boltzmann policy
+    samplers.py   external candidate samplers
+    spaces.py     Gym/Gymnasium space conversion helpers
+
+Important difference from the TensorFlow implementation:
+
+The old code flattens all state-action pairs in a rollout into one long list:
+
+    (s0, a0), (s0, a1), (s1, a0), (s2, a0), (s2, a1), ...
+
+Then it needs ``grouping_mn`` to say which pairs belong to the same original
+state, so TensorFlow can apply softmax inside each candidate set.
+
+In SB3 we keep every candidate set attached to its own observation:
+
+    obs["candidates"]     -> shape (max_candidates, candidate_dim)
+    obs["candidate_mask"] -> shape (max_candidates,)
+
+After batching, PyTorch sees logits with shape (batch, max_candidates), so the
+Categorical distribution naturally applies one softmax per observation row.
+Invalid padded slots are masked out.  That is why there is no explicit grouping
+matrix in this migration.
+
+TRPO itself is provided by ``sb3-contrib`` in the SB3 ecosystem:
+
+    pip install sb3-contrib
+
+CartPole smoke-test launch shape:
+
+python3 ./run_BDPL_sb3.py \
+  --env_source=gymnasium \
+  --env=CartPole-v1 \
+  --sb3_algorithm=PPO \
+  --num_timesteps=20000
+"""
+
+from __future__ import annotations
+
+import argparse
+import shutil
+import time
+from pathlib import Path
+from typing import Any, Tuple
+
+from agents.reinforcement_learning.sb3_bdp.callbacks import BDPCheckpointCallback
+from agents.reinforcement_learning.sb3_bdp.envs import make_sb3_env
+from agents.reinforcement_learning.sb3_bdp.model import get_algorithm_class, make_model
+
+CURRENT_PATH = Path(__file__).resolve().parent
+cfg = None
+
+
+def parse_args_cfgs() -> Tuple[argparse.Namespace, Any]:
+    global cfg
+    parser = argparse.ArgumentParser(
+        description="Train/test the BDP candidate planner with Stable-Baselines3."
+    )
+    parser.add_argument("--cfg_file", type=str, default=None, help="Config YAML used by the CARLA env.")
+    parser.add_argument("--env", type=str, default="CarlaGymEnv-v5", help="Registered CARLA Gym env id.")
+    parser.add_argument(
+        "--env_source",
+        choices=("carla", "gymnasium", "gym"),
+        default="carla",
+        help="Use the CARLA planner env, a Gymnasium env, or a legacy Gym env.",
+    )
+    parser.add_argument("--agent_id", type=int, default=None)
+    parser.add_argument("--test_dir", type=str, default=None)
+    parser.add_argument("--num_timesteps", type=float, default=1e7)
+    parser.add_argument("--num_test_episode", type=int, default=2200)
+    parser.add_argument("--save_path", type=str, default=None)
+    parser.add_argument("--log_path", type=str, default=None)
+    parser.add_argument("--log_interval", type=int, default=10)
+    parser.add_argument("--play_mode", type=int, default=0)
+    parser.add_argument("--verbosity", type=int, default=0)
+    parser.add_argument("--test", default=False, action="store_true")
+    parser.add_argument("--env_change", type=str, default="None")
+    parser.add_argument("--test_model", type=str, default="")
+    parser.add_argument("--test_last", default=False, action="store_true")
+
+    parser.add_argument("--carla_host", metavar="H", default="127.0.0.1")
+    parser.add_argument("-p", "--carla_port", metavar="P", default=2000, type=int)
+    parser.add_argument("--tm_port", default=8000, type=int)
+    parser.add_argument("--carla_res", metavar="WIDTHxHEIGHT", default="1280x720")
+
+    parser.add_argument("--learning_rate", type=float, default=7e-4)
+    parser.add_argument("--planner_mode", type=str, default="bdp")
+    parser.add_argument("--is_finish_traj", type=int, default=1)
+    parser.add_argument("--use_lidar", type=int, default=0)
+    parser.add_argument("--num_traj", type=int, default=3)
+    parser.add_argument("--scale_yaw", type=float, default=40.0)
+    parser.add_argument("--scale_v", type=float, default=0.01)
+    parser.add_argument("--bdp_debug", type=int, default=0)
+    parser.add_argument("--trpo_timesteps_per_batch", type=int, default=1024)
+    parser.add_argument("--short_hard", type=int, default=0)
+
+    parser.add_argument(
+        "--sb3_algorithm",
+        choices=("TRPO", "PPO"),
+        default="TRPO",
+        help="TRPO requires sb3-contrib. PPO is available for smoke tests/comparisons.",
+    )
+    parser.add_argument("--batch_size", type=int, default=128)
+    parser.add_argument("--gamma", type=float, default=0.99)
+    parser.add_argument("--gae_lambda", type=float, default=0.98)
+    parser.add_argument("--target_kl", type=float, default=0.01)
+    parser.add_argument("--cg_max_steps", type=int, default=10)
+    parser.add_argument("--cg_damping", type=float, default=1e-2)
+    parser.add_argument("--n_critic_updates", type=int, default=3)
+    parser.add_argument("--sub_sampling_factor", type=int, default=1)
+    parser.add_argument("--ppo_epochs", type=int, default=10)
+    parser.add_argument("--ppo_clip_range", type=float, default=0.2)
+    parser.add_argument("--save_freq", type=int, default=5000)
+    parser.add_argument("--seed", type=int, default=None)
+    parser.add_argument("--device", type=str, default="auto")
+    parser.add_argument("--max_candidates", type=int, default=None)
+    parser.add_argument("--policy_layers", type=int, nargs="+", default=[64, 64])
+    parser.add_argument("--value_layers", type=int, nargs="+", default=[64, 64])
+    parser.add_argument("--activation", choices=("tanh", "relu"), default="tanh")
+
+    args = parser.parse_args()
+    args.num_timesteps = int(args.num_timesteps)
+
+    if args.test and args.cfg_file is None and args.env_source == "carla":
+        if args.agent_id is not None:
+            log_dir = CURRENT_PATH / "logs" / f"agent_{args.agent_id}"
+        elif args.test_dir is not None:
+            log_dir = CURRENT_PATH / "logs" / args.test_dir
+        else:
+            raise ValueError("--test without --cfg_file needs --agent_id or --test_dir")
+
+        candidates = sorted(log_dir.glob("*.yaml"))
+        if not candidates:
+            raise FileNotFoundError(f"No YAML config found in {log_dir}")
+        args.cfg_file = str(candidates[0])
+
+    if args.cfg_file is None and args.env_source == "carla":
+        raise ValueError("--cfg_file is required for training")
+
+    if args.cfg_file is not None:
+        from config import cfg as loaded_cfg
+        from config import cfg_from_yaml_file
+
+        cfg = loaded_cfg
+        cfg_from_yaml_file(args.cfg_file, cfg)
+        cfg.TAG = Path(args.cfg_file).stem
+        cfg.EXP_GROUP_PATH = "/".join(args.cfg_file.split("/")[1:-1])
+
+    return args, cfg
+
+
+def prepare_log_dirs(args: argparse.Namespace) -> Tuple[Path, Path]:
+    if args.agent_id is not None:
+        log_dir = CURRENT_PATH / "logs" / f"agent_{args.agent_id}"
+    elif args.test and args.test_dir is not None:
+        log_dir = CURRENT_PATH / "logs" / args.test_dir
+    elif args.log_path is not None:
+        log_dir = Path(args.log_path)
+        if not log_dir.is_absolute():
+            log_dir = CURRENT_PATH / log_dir
+    else:
+        timestamp = time.strftime("%Y%m%d%H%M%S")
+        log_dir = CURRENT_PATH / "logs" / f"sb3_{timestamp}"
+
+    model_dir = log_dir / "models"
+
+    if args.test:
+        if not model_dir.exists():
+            raise FileNotFoundError(f"Model directory does not exist: {model_dir}")
+    else:
+        if log_dir.exists() and args.agent_id is not None:
+            raise FileExistsError(f"Refusing to overwrite existing log directory: {log_dir}")
+        model_dir.mkdir(parents=True, exist_ok=False)
+        copy_reproduction_info(args, log_dir)
+
+    return log_dir, model_dir
+
+
+def copy_reproduction_info(args: argparse.Namespace, log_dir: Path) -> None:
+    try:
+        import git
+
+        repo = git.Repo(search_parent_directories=False)
+        commit_id = repo.head.object.hexsha
+    except Exception as exc:
+        commit_id = f"unavailable ({exc})"
+
+    with (log_dir / "reproduction_info.txt").open("w") as f:
+        f.write(f"Git commit id: {commit_id}\n\n")
+        f.write(f"Program arguments:\n\n{args}\n\n")
+        if cfg is not None:
+            f.write(f"Configuration file:\n\n{cfg}\n")
+        else:
+            f.write("Configuration file:\n\nNone; generic Gym/Gymnasium environment.\n")
+        f.write("\nMigration runner: run_BDPL_sb3.py\n")
+
+    if args.cfg_file is not None:
+        shutil.copyfile(args.cfg_file, log_dir / Path(args.cfg_file).name)
+
+
+def parse_step_from_name(path: Path) -> int:
+    digits = "".join(ch if ch.isdigit() else " " for ch in path.stem).split()
+    return int(digits[-1]) if digits else -1
+
+
+def resolve_model_path(args: argparse.Namespace, model_dir: Path) -> Path:
+    if args.test_model:
+        path = Path(args.test_model)
+        if not path.is_absolute():
+            path = model_dir / path
+        if path.suffix != ".zip" and path.with_suffix(".zip").exists():
+            path = path.with_suffix(".zip")
+        return path
+
+    pattern = "step_*.zip" if args.test_last else "best_*.zip"
+    candidates = sorted(model_dir.glob(pattern), key=parse_step_from_name)
+    if not candidates:
+        candidates = sorted(model_dir.glob("*final_model.zip"), key=lambda p: p.stat().st_mtime)
+    if not candidates:
+        raise FileNotFoundError(f"No SB3 model found in {model_dir}")
+    return candidates[-1]
+
+
+def run_training(args: argparse.Namespace) -> None:
+    log_dir, model_dir = prepare_log_dirs(args)
+    env = make_sb3_env(args, log_dir, is_train=True)
+    model = make_model(args, env, model_dir)
+    checkpoint = BDPCheckpointCallback(model_dir, save_freq=args.save_freq)
+
+    final_model = model_dir / f"{args.sb3_algorithm}_BDP_final_model"
+    try:
+        print("Model is created")
+        print("Training started")
+        model.learn(
+            total_timesteps=args.num_timesteps,
+            callback=checkpoint,
+            log_interval=args.log_interval,
+            tb_log_name=f"{args.sb3_algorithm}_BDP",
+        )
+    finally:
+        print("*" * 100)
+        print("FINISHED TRAINING; saving model...")
+        print("*" * 100)
+        model.save(str(final_model))
+        env.close()
+        print(f"Model has been saved to {final_model}.zip")
+
+
+def run_test(args: argparse.Namespace) -> None:
+    log_dir, model_dir = prepare_log_dirs(args)
+    env = make_sb3_env(args, log_dir, is_train=False)
+    model_path = resolve_model_path(args, model_dir)
+    algorithm_class = get_algorithm_class(args.sb3_algorithm)
+
+    print(f"{model_path.name} is loading...")
+    model = algorithm_class.load(str(model_path), env=env, device=args.device)
+    print("Model is loaded")
+
+    try:
+        obs, _ = env.reset()
+        episode_count = 0
+        while episode_count < args.num_test_episode:
+            action, _ = model.predict(obs, deterministic=True)
+            obs, _, done, _, _ = env.step(action)
+            if args.play_mode != 0:
+                env.render()
+            if done:
+                episode_count += 1
+                print(f"{episode_count}/{args.num_test_episode} finished")
+                if episode_count < args.num_test_episode:
+                    obs, _ = env.reset()
+    finally:
+        env.close()
+
+
+if __name__ == "__main__":
+    parsed_args, _ = parse_args_cfgs()
+    print("Env is starting")
+    if parsed_args.test:
+        run_test(parsed_args)
+    else:
+        run_training(parsed_args)

@@ -16,6 +16,15 @@ git add ./*.py
 git add ./*.yaml
 git add ./*.sh
 
+# ===================
+# re-deploy on pc
+# ===================
+#manually download carla 0.9.9.4, manually install anaconda 2019.07, change folder name to 0.9.9.2
+export PATH="/home/ruoyu/anaconda3/bin:$PATH"
+conda create --prefix ~/tensorflow115/ python=3.7
+
+
+
 # =======================================================================================
 # re-deploy on csf3
 # =======================================================================================
