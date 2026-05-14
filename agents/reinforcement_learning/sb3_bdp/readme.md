@@ -31,6 +31,28 @@ categorical logits.
 `spaces.py`
 : Small Gym/Gymnasium space conversion helpers.
 
+## Log Directory Layout
+
+For training, `--log_path` is treated as a parent experiment directory.  The
+runner creates a timestamped child folder for each run:
+
+```text
+--log_path=logs/sb3_bdp_cartpole_ppo
+
+actual run folder:
+logs/sb3_bdp_cartpole_ppo/YYYYmmdd_HHMMSS/
+```
+
+This keeps repeated launches with the same `--log_path` separated instead of
+overwriting each other.  The model files are saved below:
+
+```text
+logs/sb3_bdp_cartpole_ppo/YYYYmmdd_HHMMSS/models/
+```
+
+For testing, pass `--log_path` to the specific timestamped run folder you want
+to load.
+
 ## Candidate Observation Format
 
 SB3 expects fixed-shape observation spaces, but BDPL candidate sets can be
@@ -189,10 +211,40 @@ python3 run_BDPL_sb3.py \
   --log_path=logs/sb3_bdp_frozenlake_ppo
 ```
 
+## Parallel Gymnasium Training
+
+For generic Gym/Gymnasium environments, use `--n_envs` to create multiple
+copies of the environment.  With SB3 on-policy algorithms, the rollout batch
+size becomes:
+
+```text
+rollout batch size = n_steps * n_envs
+```
+
+In this runner, `n_steps` is set by `--trpo_timesteps_per_batch`.
+
+Use `--vec_env=dummy` for multiple envs in one process, or `--vec_env=subproc`
+for process-level parallelism:
+
+```bash
+python3 run_BDPL_sb3.py \
+  --env_source=gymnasium \
+  --env=CartPole-v1 \
+  --sb3_algorithm=PPO \
+  --num_timesteps=20000 \
+  --trpo_timesteps_per_batch=256 \
+  --n_envs=4 \
+  --vec_env=subproc \
+  --batch_size=128 \
+  --learning_rate=7e-4 \
+  --log_interval=1 \
+  --log_path=logs/sb3_bdp_cartpole_ppo_4env
+```
+
 ## Test a Saved Model
 
 Use the same `--env_source`, `--env`, and `--sb3_algorithm` as training.  Point
-`--log_path` at the training log directory:
+`--log_path` at the specific timestamped training run directory:
 
 ```bash
 python3 run_BDPL_sb3.py \
@@ -200,7 +252,7 @@ python3 run_BDPL_sb3.py \
   --env_source=gymnasium \
   --env=CartPole-v1 \
   --sb3_algorithm=PPO \
-  --log_path=logs/sb3_bdp_cartpole_ppo \
+  --log_path=logs/sb3_bdp_cartpole_ppo/20260514_153000 \
   --num_test_episode=10
 ```
 
@@ -223,8 +275,16 @@ usually be omitted, so it defaults to the number of actions.
 : Activation used by both networks.  Current choices are `tanh` and `relu`.
 
 `--save_freq 5000`
-: Save `step_*.zip` checkpoints every N timesteps.  Best checkpoints are saved
-from SB3 monitor episode rewards.
+: Save periodic `step_*_steps.zip` checkpoints every N total timesteps with
+SB3 `CheckpointCallback`.  Use `0` to disable periodic checkpoints.
+
+`--eval_freq 10000`
+: Evaluate every N total timesteps with SB3 `EvalCallback` and save a single
+`best_model.zip` when the evaluation mean reward improves.  Use `0` to disable
+best-model evaluation/saving.
+
+`--n_eval_episodes 5`
+: Number of episodes used by each `EvalCallback` evaluation.
 
 `--device cpu`
 : Force CPU.  The default `auto` lets SB3 choose.

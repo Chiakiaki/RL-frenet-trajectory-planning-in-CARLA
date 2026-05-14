@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
 from stable_baselines3.common.monitor import Monitor
+from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 
 from .samplers import DiscreteOneHotExternalSampler, ExternalCandidateSampler
 from .spaces import as_gymnasium_box, convert_to_gymnasium_space
@@ -496,8 +497,15 @@ def make_generic_discrete_env(args: argparse.Namespace) -> gym.Env:
     return GenericDiscreteCandidateEnv(env, sampler=sampler, max_candidates=args.max_candidates)
 
 
-def make_sb3_env(args: argparse.Namespace, log_dir: Path, is_train: bool) -> Monitor:
+def make_monitored_sb3_env(
+    args: argparse.Namespace,
+    log_dir: Path,
+    is_train: bool,
+    rank: Optional[int] = None,
+) -> Monitor:
     if args.env_source == "carla":
+        if rank is not None:
+            raise ValueError("Parallel CARLA envs are not enabled by this SB3 runner")
         legacy_env = make_legacy_carla_env(args)
         if hasattr(legacy_env, "open_log_saver"):
             legacy_env.open_log_saver(str(log_dir), is_train=is_train)
@@ -507,5 +515,33 @@ def make_sb3_env(args: argparse.Namespace, log_dir: Path, is_train: bool) -> Mon
 
     candidate_env = make_generic_discrete_env(args)
     monitor_dir = log_dir if is_train else log_dir / "test"
+    if rank is not None:
+        monitor_dir = monitor_dir / f"env_{rank}"
     monitor_dir.mkdir(parents=True, exist_ok=True)
     return Monitor(candidate_env, str(monitor_dir))
+
+
+def make_sb3_env(args: argparse.Namespace, log_dir: Path, is_train: bool) -> Any:
+    n_envs = int(getattr(args, "n_envs", 1))
+    if not is_train or n_envs <= 1:
+        return make_monitored_sb3_env(args, log_dir, is_train=is_train)
+
+    if args.env_source == "carla":
+        raise ValueError(
+            "Parallel training is currently implemented only for generic Gym/Gymnasium envs. "
+            "CARLA needs separate ports/modules per process before it can be vectorized safely."
+        )
+
+    if n_envs < 1:
+        raise ValueError(f"--n_envs must be >= 1, got {n_envs}")
+
+    def make_env(rank: int) -> Callable[[], Monitor]:
+        def _init() -> Monitor:
+            return make_monitored_sb3_env(args, log_dir, is_train=True, rank=rank)
+
+        return _init
+
+    env_fns = [make_env(rank) for rank in range(n_envs)]
+    if args.vec_env == "subproc":
+        return SubprocVecEnv(env_fns)
+    return DummyVecEnv(env_fns)

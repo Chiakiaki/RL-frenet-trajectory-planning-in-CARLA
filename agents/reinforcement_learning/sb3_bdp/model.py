@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Any, Type
 
 from stable_baselines3 import PPO
-from stable_baselines3.common.monitor import Monitor
 from torch import nn
 
 from .policies import BDPBoltzmannPolicy
@@ -33,7 +32,7 @@ def get_algorithm_class(name: str) -> Type[Any]:
     raise ValueError(f"Unsupported SB3 algorithm: {name}")
 
 
-def make_model(args: argparse.Namespace, env: Monitor, model_dir: Path) -> Any:
+def make_model(args: argparse.Namespace, env: Any, model_dir: Path) -> Any:
     algorithm_class = get_algorithm_class(args.sb3_algorithm)
     policy_kwargs = dict(
         net_arch=dict(pi=list(args.policy_layers), vf=list(args.value_layers)),
@@ -41,6 +40,9 @@ def make_model(args: argparse.Namespace, env: Monitor, model_dir: Path) -> Any:
         normalize_images=False,
     )
 
+    # n_steps is the rollout collection length for the inner data-collection loop of on-policy algorithms like PPO/TRPO
+    # in sb3,rollout batch size should be n_steps * n_envs
+    # n_steps is often much smaller for A2C. SB3’s default A2C value is commonly n_steps=5, while PPO often uses larger values like 2048.
     common_kwargs = dict(
         policy=BDPBoltzmannPolicy,
         env=env,

@@ -62,12 +62,16 @@ import time
 from pathlib import Path
 from typing import Any, Tuple
 
-from agents.reinforcement_learning.sb3_bdp.callbacks import BDPCheckpointCallback
+from agents.reinforcement_learning.sb3_bdp.callbacks import make_training_callback
 from agents.reinforcement_learning.sb3_bdp.envs import make_sb3_env
 from agents.reinforcement_learning.sb3_bdp.model import get_algorithm_class, make_model
 
 CURRENT_PATH = Path(__file__).resolve().parent
 cfg = None
+
+
+def make_run_timestamp() -> str:
+    return time.strftime("%Y%m%d_%H%M%S")
 
 
 def parse_args_cfgs() -> Tuple[argparse.Namespace, Any]:
@@ -130,8 +134,27 @@ def parse_args_cfgs() -> Tuple[argparse.Namespace, Any]:
     parser.add_argument("--ppo_epochs", type=int, default=10)
     parser.add_argument("--ppo_clip_range", type=float, default=0.2)
     parser.add_argument("--save_freq", type=int, default=5000)
+    parser.add_argument(
+        "--eval_freq",
+        type=int,
+        default=10000,
+        help="Evaluate and save SB3 best_model.zip every N total timesteps. Use 0 to disable.",
+    )
+    parser.add_argument("--n_eval_episodes", type=int, default=5)
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--device", type=str, default="auto")
+    parser.add_argument(
+        "--n_envs",
+        type=int,
+        default=1,
+        help="Number of parallel training environments for generic Gym/Gymnasium envs.",
+    )
+    parser.add_argument(
+        "--vec_env",
+        choices=("dummy", "subproc"),
+        default="dummy",
+        help="Vector-env backend when --n_envs > 1. Use subproc for process-level parallelism.",
+    )
     parser.add_argument("--max_candidates", type=int, default=None)
     parser.add_argument("--policy_layers", type=int, nargs="+", default=[64, 64])
     parser.add_argument("--value_layers", type=int, nargs="+", default=[64, 64])
@@ -177,8 +200,10 @@ def prepare_log_dirs(args: argparse.Namespace) -> Tuple[Path, Path]:
         log_dir = Path(args.log_path)
         if not log_dir.is_absolute():
             log_dir = CURRENT_PATH / log_dir
+        if not args.test:
+            log_dir = log_dir / make_run_timestamp()
     else:
-        timestamp = time.strftime("%Y%m%d%H%M%S")
+        timestamp = make_run_timestamp()
         log_dir = CURRENT_PATH / "logs" / f"sb3_{timestamp}"
 
     model_dir = log_dir / "models"
@@ -231,8 +256,15 @@ def resolve_model_path(args: argparse.Namespace, model_dir: Path) -> Path:
             path = path.with_suffix(".zip")
         return path
 
-    pattern = "step_*.zip" if args.test_last else "best_*.zip"
+    if not args.test_last:
+        best_model = model_dir / "best_model.zip"
+        if best_model.exists():
+            return best_model
+
+    pattern = "step_*_steps.zip" if args.test_last else "best_*.zip"
     candidates = sorted(model_dir.glob(pattern), key=parse_step_from_name)
+    if args.test_last and not candidates:
+        candidates = sorted(model_dir.glob("step_*.zip"), key=parse_step_from_name)
     if not candidates:
         candidates = sorted(model_dir.glob("*final_model.zip"), key=lambda p: p.stat().st_mtime)
     if not candidates:
@@ -244,7 +276,13 @@ def run_training(args: argparse.Namespace) -> None:
     log_dir, model_dir = prepare_log_dirs(args)
     env = make_sb3_env(args, log_dir, is_train=True)
     model = make_model(args, env, model_dir)
-    checkpoint = BDPCheckpointCallback(model_dir, save_freq=args.save_freq)
+    eval_env = None
+    if args.eval_freq > 0:
+        if args.env_source == "carla":
+            print("SB3 EvalCallback best-model saving is skipped for CARLA training.")
+        else:
+            eval_env = make_sb3_env(args, log_dir, is_train=False)
+    callback = make_training_callback(args, model_dir, eval_env=eval_env)
 
     final_model = model_dir / f"{args.sb3_algorithm}_BDP_final_model"
     try:
@@ -252,7 +290,7 @@ def run_training(args: argparse.Namespace) -> None:
         print("Training started")
         model.learn(
             total_timesteps=args.num_timesteps,
-            callback=checkpoint,
+            callback=callback,
             log_interval=args.log_interval,
             tb_log_name=f"{args.sb3_algorithm}_BDP",
         )
@@ -262,6 +300,8 @@ def run_training(args: argparse.Namespace) -> None:
         print("*" * 100)
         model.save(str(final_model))
         env.close()
+        if eval_env is not None:
+            eval_env.close()
         print(f"Model has been saved to {final_model}.zip")
 
 
