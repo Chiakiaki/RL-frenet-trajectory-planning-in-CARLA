@@ -200,6 +200,21 @@ def parse_args_cfgs() -> Tuple[argparse.Namespace, Any]:
         help="Vector-env backend when --n_envs > 1. Use subproc for process-level parallelism.",
     )
     parser.add_argument("--max_candidates", type=int, default=None)
+    parser.add_argument(
+        "--policy_mode",
+        choices=("bdp", "builtin"),
+        default="bdp",
+        help=(
+            "bdp uses the candidate-action Dict observation and BDPBoltzmannPolicy. "
+            "builtin uses the raw Gym/Gymnasium env and an ordinary SB3 policy."
+        ),
+    )
+    parser.add_argument(
+        "--builtin_policy",
+        type=str,
+        default="MlpPolicy",
+        help="SB3 policy name/class used only when --policy_mode=builtin, e.g. MlpPolicy or CnnPolicy.",
+    )
     parser.add_argument("--policy_layers", type=int, nargs="+", default=[64, 64])
     parser.add_argument("--value_layers", type=int, nargs="+", default=[64, 64])
     parser.add_argument("--activation", choices=("tanh", "relu"), default="tanh")
@@ -345,7 +360,8 @@ def run_training(args: argparse.Namespace) -> None:
             eval_env = make_sb3_env(args, log_dir, is_train=False)
     callback = make_training_callback(args, model_dir, eval_env=eval_env)
 
-    final_model = model_dir / f"{args.sb3_algorithm}_BDP_final_model"
+    model_tag = "BDP" if args.policy_mode == "bdp" else "builtin"
+    final_model = model_dir / f"{args.sb3_algorithm}_{model_tag}_final_model"
     try:
         print("Model is created")
         print("Training started")
@@ -353,7 +369,7 @@ def run_training(args: argparse.Namespace) -> None:
             total_timesteps=args.num_timesteps,
             callback=callback,
             log_interval=args.log_interval,
-            tb_log_name=f"{args.sb3_algorithm}_BDP",
+            tb_log_name=f"{args.sb3_algorithm}_{model_tag}",
         )
     finally:
         print("*" * 100)

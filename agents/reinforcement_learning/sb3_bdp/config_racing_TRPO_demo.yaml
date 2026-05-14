@@ -46,7 +46,9 @@ algorithm:
   vec_env: subproc
 
 model_architecture:
+  policy_mode: bdp
   policy_class: BDPBoltzmannPolicy
+  builtin_policy: CnnPolicy
   policy_layers: [64, 64]
   value_layers: [64, 64]
   activation: tanh

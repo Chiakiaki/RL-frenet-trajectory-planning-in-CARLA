@@ -133,11 +133,13 @@ def build_resolved_config(args: argparse.Namespace) -> Dict[str, Any]:
             "vec_env": args.vec_env,
         },
         "model_architecture": {
-            "policy_class": "BDPBoltzmannPolicy",
+            "policy_mode": args.policy_mode,
+            "policy_class": "BDPBoltzmannPolicy" if args.policy_mode == "bdp" else args.builtin_policy,
+            "builtin_policy": args.builtin_policy,
             "policy_layers": list(args.policy_layers),
             "value_layers": list(args.value_layers),
             "activation": args.activation,
-            "candidate_sampler": "DiscreteOneHotExternalSampler",
+            "candidate_sampler": "DiscreteOneHotExternalSampler" if args.policy_mode == "bdp" else None,
         },
         "logging": {
             "log_path": args.log_path,

@@ -34,17 +34,23 @@ def get_algorithm_class(name: str) -> Type[Any]:
 
 def make_model(args: argparse.Namespace, env: Any, model_dir: Path) -> Any:
     algorithm_class = get_algorithm_class(args.sb3_algorithm)
-    policy_kwargs = dict(
-        net_arch=dict(pi=list(args.policy_layers), vf=list(args.value_layers)),
-        activation_fn=activation_from_name(args.activation),
-        normalize_images=False,
-    )
+    policy_mode = getattr(args, "policy_mode", "bdp")
+    if policy_mode == "builtin":
+        policy = args.builtin_policy
+        policy_kwargs = None
+    else:
+        policy = BDPBoltzmannPolicy
+        policy_kwargs = dict(
+            net_arch=dict(pi=list(args.policy_layers), vf=list(args.value_layers)),
+            activation_fn=activation_from_name(args.activation),
+            normalize_images=False,
+        )
 
     # n_steps is the rollout collection length for the inner data-collection loop of on-policy algorithms like PPO/TRPO
     # in sb3,rollout batch size should be n_steps * n_envs
     # n_steps is often much smaller for A2C. SB3’s default A2C value is commonly n_steps=5, while PPO often uses larger values like 2048.
     common_kwargs = dict(
-        policy=BDPBoltzmannPolicy,
+        policy=policy,
         env=env,
         learning_rate=args.learning_rate,
         n_steps=args.trpo_timesteps_per_batch,
@@ -52,14 +58,15 @@ def make_model(args: argparse.Namespace, env: Any, model_dir: Path) -> Any:
         gamma=args.gamma,
         gae_lambda=args.gae_lambda,
         tensorboard_log=str(model_dir),
-        policy_kwargs=policy_kwargs,
         verbose=1,
         seed=args.seed,
         device=args.device,
     )
+    if policy_kwargs is not None:
+        common_kwargs["policy_kwargs"] = policy_kwargs
 
     if args.sb3_algorithm == "TRPO":
-        if args.sub_sampling_factor != 1:
+        if policy_mode == "bdp" and args.sub_sampling_factor != 1:
             raise ValueError(
                 "SB3-contrib TRPO sub_sampling_factor > 1 is not supported by this "
                 "Dict-observation candidate wrapper. Use the default value of 1."

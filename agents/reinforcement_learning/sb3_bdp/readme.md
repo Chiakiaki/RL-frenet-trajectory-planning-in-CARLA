@@ -23,7 +23,8 @@ categorical logits.
 
 `model.py`
 : SB3 algorithm factory.  It selects `TRPO` from `sb3-contrib` or built-in SB3
-`PPO`.
+`PPO`.  It can build either the BDP candidate-action policy or an ordinary SB3
+policy through `policy_mode`.
 
 `callbacks.py`
 : Checkpoint saving callback.
@@ -69,6 +70,68 @@ CLI overrides.
 The SB3 config does not include the old CARLA YAML contents.  It only stores
 the legacy CARLA config path under `legacy_carla.cfg_file`, and that path is
 ignored when `env_source` is `gymnasium` or `gym`.
+
+## BDP Mode vs Built-In SB3 Mode
+
+The default mode is the migrated BDP candidate-action algorithm:
+
+```yaml
+model_architecture:
+  policy_mode: bdp
+  policy_class: BDPBoltzmannPolicy
+  candidate_sampler: DiscreteOneHotExternalSampler
+```
+
+In this mode, Gym/Gymnasium observations are wrapped into the candidate-action
+Dict observation:
+
+```text
+obs["obs"], obs["candidates"], obs["candidate_mask"]
+```
+
+The action is a candidate row index, and `BDPBoltzmannPolicy` scores
+`(state, candidate)` pairs.
+
+To run the original off-the-shelf SB3 algorithm instead, set:
+
+```yaml
+model_architecture:
+  policy_mode: builtin
+  builtin_policy: MlpPolicy
+```
+
+`policy_mode: builtin` uses the raw Gym/Gymnasium observation space and action
+space directly.  No candidate table is created, no one-hot external sampler is
+used, and SB3 receives the policy name exactly like a normal PPO/TRPO script.
+Use `MlpPolicy` for vector observations such as CartPole and `CnnPolicy` for
+image observations such as CarRacing.
+
+The same switch is available from the command line:
+
+```bash
+python3 run_BDPL_sb3.py \
+  --env_source=gymnasium \
+  --env=CartPole-v1 \
+  --sb3_algorithm=PPO \
+  --policy_mode=builtin \
+  --builtin_policy=MlpPolicy \
+  --num_timesteps=20000 \
+  --log_path=logs/sb3_builtin_cartpole_ppo
+```
+
+For discrete CarRacing with SB3's built-in CNN policy:
+
+```bash
+python3 run_BDPL_sb3.py \
+  --env_source=gymnasium \
+  --env=CarRacing-v3 \
+  --gym_make_kwargs='{"continuous": false}' \
+  --sb3_algorithm=PPO \
+  --policy_mode=builtin \
+  --builtin_policy=CnnPolicy \
+  --num_timesteps=20000 \
+  --log_path=logs/sb3_builtin_racing_ppo
+```
 
 ## YAML Config Entrypoint
 

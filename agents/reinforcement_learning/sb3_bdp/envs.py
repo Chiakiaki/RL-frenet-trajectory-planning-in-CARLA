@@ -485,7 +485,14 @@ def make_legacy_carla_env(args: argparse.Namespace) -> Any:
     return env
 
 
-def make_generic_discrete_env(args: argparse.Namespace, is_train: bool = True) -> gym.Env:
+def make_raw_generic_env(args: argparse.Namespace, is_train: bool = True) -> gym.Env:
+    """
+    Create an ordinary Gymnasium/Gym env without the BDP candidate wrapper.
+
+    This is used for ``--policy_mode=builtin`` so SB3 sees the same observation
+    and action spaces it would see in a normal PPO/TRPO script.
+    """
+
     requested_render_mode = getattr(args, "render_mode", None)
     should_render = bool(getattr(args, "render_train", False)) if is_train else bool(getattr(args, "play_mode", 0))
     render_mode = requested_render_mode if should_render else None
@@ -507,6 +514,11 @@ def make_generic_discrete_env(args: argparse.Namespace, is_train: bool = True) -
     else:
         raise ValueError(f"Unsupported generic env source: {args.env_source}")
 
+    return env
+
+
+def make_generic_discrete_env(args: argparse.Namespace, is_train: bool = True) -> gym.Env:
+    env = make_raw_generic_env(args, is_train=is_train)
     sampler = DiscreteOneHotExternalSampler(env.action_space)
     return GenericDiscreteCandidateEnv(env, sampler=sampler, max_candidates=args.max_candidates)
 
@@ -518,6 +530,11 @@ def make_monitored_sb3_env(
     rank: Optional[int] = None,
 ) -> Monitor:
     if args.env_source == "carla":
+        if getattr(args, "policy_mode", "bdp") == "builtin":
+            raise ValueError(
+                "--policy_mode=builtin is currently implemented for Gym/Gymnasium envs. "
+                "Use --policy_mode=bdp for the legacy CARLA candidate-action wrapper."
+            )
         if rank is not None:
             raise ValueError("Parallel CARLA envs are not enabled by this SB3 runner")
         legacy_env = make_legacy_carla_env(args)
@@ -527,12 +544,15 @@ def make_monitored_sb3_env(
         candidate_env = BDPCandidateEnv(legacy_env, max_candidates=args.max_candidates)
         return Monitor(candidate_env, str(log_dir), info_keywords=("reserved",))
 
-    candidate_env = make_generic_discrete_env(args, is_train=is_train)
+    if getattr(args, "policy_mode", "bdp") == "builtin":
+        env = make_raw_generic_env(args, is_train=is_train)
+    else:
+        env = make_generic_discrete_env(args, is_train=is_train)
     monitor_dir = log_dir if is_train else log_dir / "test"
     if rank is not None:
         monitor_dir = monitor_dir / f"env_{rank}"
     monitor_dir.mkdir(parents=True, exist_ok=True)
-    return Monitor(candidate_env, str(monitor_dir))
+    return Monitor(env, str(monitor_dir))
 
 
 def make_sb3_env(args: argparse.Namespace, log_dir: Path, is_train: bool) -> Any:
