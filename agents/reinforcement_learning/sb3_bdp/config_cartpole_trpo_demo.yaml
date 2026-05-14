@@ -1,0 +1,70 @@
+# SB3 BDP/BDPL runner config generated from the CartPole 4-env reproduction info.
+# This file is independent from the legacy CARLA YAML config.  The legacy CARLA
+# path is kept only for documentation and is ignored when env_source is not carla.
+
+environment:
+  env_source: gymnasium
+  env: CartPole-v1
+  gym_make_kwargs: {}
+  max_candidates:
+
+legacy_carla:
+  cfg_file:
+  carla_host: 127.0.0.1
+  carla_port: 2000
+  tm_port: 8000
+  carla_res: 1280x720
+  planner_mode: bdp
+  is_finish_traj: 1
+  use_lidar: 0
+  num_traj: 3
+  scale_yaw: 40.0
+  scale_v: 0.01
+  bdp_debug: 0
+  short_hard: 0
+  env_change: None
+
+algorithm:
+  name: TRPO
+  learning_rate: 0.0007
+  num_timesteps: 20000
+  trpo_timesteps_per_batch: 256
+  batch_size: 128
+  gamma: 0.99
+  gae_lambda: 0.98
+  target_kl: 0.01
+  cg_max_steps: 10
+  cg_damping: 0.01
+  n_critic_updates: 3
+  sub_sampling_factor: 1
+  ppo_epochs: 10
+  ppo_clip_range: 0.2
+  seed:
+  device: auto
+  n_envs: 4
+  vec_env: subproc
+
+model_architecture:
+  policy_class: BDPBoltzmannPolicy
+  policy_layers: [64, 64]
+  value_layers: [64, 64]
+  activation: tanh
+  candidate_sampler: DiscreteOneHotExternalSampler
+
+logging:
+  log_path: logs/sb3_bdp_cartpole_trpo_4env
+  log_interval: 1
+  save_freq: 5000
+  eval_freq: 5000
+  n_eval_episodes: 5
+
+render:
+  play_mode: 0   #  for actually rendering during test.
+  render_mode: "human" # e.g. human,rgb_array,or nothing
+  render_train: false
+  render_freq: 1
+
+testing:
+  num_test_episode: 2200
+  test_model: ''
+  test_last: false

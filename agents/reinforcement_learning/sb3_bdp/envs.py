@@ -30,6 +30,7 @@ class LegacyGymCompatibilityEnv(gym.Env):
     def __init__(self, legacy_env: Any):
         super().__init__()
         self.legacy_env = legacy_env
+        self.render_mode = getattr(legacy_env, "render_mode", None)
         self.observation_space = convert_to_gymnasium_space(legacy_env.observation_space)
         self.action_space = convert_to_gymnasium_space(legacy_env.action_space)
 
@@ -98,6 +99,7 @@ class BDPCandidateEnv(gym.Env):
     def __init__(self, legacy_env: Any, max_candidates: Optional[int] = None):
         super().__init__()
         self.legacy_env = legacy_env
+        self.render_mode = getattr(legacy_env, "render_mode", None)
         self.max_candidates = int(max_candidates or getattr(legacy_env, "num_traj", 0))
         if self.max_candidates <= 0:
             raise ValueError("max_candidates must be provided when legacy_env.num_traj is unavailable")
@@ -294,6 +296,7 @@ class GenericDiscreteCandidateEnv(gym.Env):
     ):
         super().__init__()
         self.env = env
+        self.render_mode = getattr(env, "render_mode", None)
         self._raw_observation_is_discrete = isinstance(convert_to_gymnasium_space(env.observation_space), spaces.Discrete)
         self.raw_observation_space = self._convert_observation_space(env.observation_space)
         self.raw_action_space = self._convert_action_space(env.action_space)
@@ -482,13 +485,24 @@ def make_legacy_carla_env(args: argparse.Namespace) -> Any:
     return env
 
 
-def make_generic_discrete_env(args: argparse.Namespace) -> gym.Env:
+def make_generic_discrete_env(args: argparse.Namespace, is_train: bool = True) -> gym.Env:
+    requested_render_mode = getattr(args, "render_mode", None)
+    should_render = bool(getattr(args, "render_train", False)) if is_train else bool(getattr(args, "play_mode", 0))
+    render_mode = requested_render_mode if should_render else None
+    gym_make_kwargs = dict(getattr(args, "gym_make_kwargs", {}) or {})
+    if render_mode is not None:
+        gym_make_kwargs["render_mode"] = render_mode
+
     if args.env_source == "gymnasium":
-        env = gym.make(args.env)
+        env = gym.make(args.env, **gym_make_kwargs)
     elif args.env_source == "gym":
         import gym as legacy_gym
 
-        legacy_env = legacy_gym.make(args.env)
+        try:
+            legacy_env = legacy_gym.make(args.env, **gym_make_kwargs)
+        except TypeError:
+            gym_make_kwargs.pop("render_mode", None)
+            legacy_env = legacy_gym.make(args.env, **gym_make_kwargs)
         env = LegacyGymCompatibilityEnv(legacy_env)
     else:
         raise ValueError(f"Unsupported generic env source: {args.env_source}")
@@ -513,7 +527,7 @@ def make_monitored_sb3_env(
         candidate_env = BDPCandidateEnv(legacy_env, max_candidates=args.max_candidates)
         return Monitor(candidate_env, str(log_dir), info_keywords=("reserved",))
 
-    candidate_env = make_generic_discrete_env(args)
+    candidate_env = make_generic_discrete_env(args, is_train=is_train)
     monitor_dir = log_dir if is_train else log_dir / "test"
     if rank is not None:
         monitor_dir = monitor_dir / f"env_{rank}"

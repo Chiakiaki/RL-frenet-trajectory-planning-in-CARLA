@@ -10,6 +10,19 @@ from typing import Optional
 from stable_baselines3.common.callbacks import BaseCallback, CallbackList, CheckpointCallback, EvalCallback
 
 
+class RenderCallback(BaseCallback):
+    """Call ``render()`` periodically during training."""
+
+    def __init__(self, render_freq: int = 1, verbose: int = 0):
+        super().__init__(verbose=verbose)
+        self.render_freq = int(render_freq)
+
+    def _on_step(self) -> bool:
+        if self.render_freq > 0 and self.n_calls % self.render_freq == 0:
+            self.training_env.render()
+        return True
+
+
 def callback_freq_from_timesteps(freq: int, n_envs: int) -> int:
     """
     Convert a desired total-timestep frequency into SB3 callback calls.
@@ -61,6 +74,9 @@ def make_training_callback(
                 render=False,
             )
         )
+
+    if bool(getattr(args, "render_train", False)):
+        callbacks.append(RenderCallback(render_freq=args.render_freq))
 
     if not callbacks:
         return None

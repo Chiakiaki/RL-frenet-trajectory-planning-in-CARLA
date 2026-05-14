@@ -53,6 +53,72 @@ logs/sb3_bdp_cartpole_ppo/YYYYmmdd_HHMMSS/models/
 For testing, pass `--log_path` to the specific timestamped run folder you want
 to load.
 
+Each training run also writes a resolved SB3 runner config:
+
+```text
+logs/sb3_bdp_cartpole_ppo/YYYYmmdd_HHMMSS/config.yaml
+```
+
+If you passed `--config_file`, that exact config file is copied to
+`config.yaml` in the run folder.  If you did not pass `--config_file`, the
+runner writes a generated `config.yaml` from the active CLI arguments.  The run
+folder also contains `resolved_config.yaml`, which records the final effective
+Gym/SB3 environment, model architecture, algorithm, and hyper-parameters after
+CLI overrides.
+
+The SB3 config does not include the old CARLA YAML contents.  It only stores
+the legacy CARLA config path under `legacy_carla.cfg_file`, and that path is
+ignored when `env_source` is `gymnasium` or `gym`.
+
+## YAML Config Entrypoint
+
+You can launch training from a YAML file:
+
+```bash
+python3 run_BDPL_sb3.py \
+  --config_file=agents/reinforcement_learning/sb3_bdp/config.yaml
+```
+
+The YAML keys correspond to the same CLI options used by the runner.  Command
+line arguments can still override values from the file:
+
+```bash
+python3 run_BDPL_sb3.py \
+  --config_file=agents/reinforcement_learning/sb3_bdp/config_cartpole_ppo_demo.yaml \
+  --num_timesteps=5000
+```
+```bash
+python3 run_BDPL_sb3.py \
+  --config_file=agents/reinforcement_learning/sb3_bdp/config_racing_ppo_demo.yaml \
+  --num_timesteps=5000
+```
+
+
+For testing, if `--config_file` is omitted, the runner automatically loads the
+run folder config:
+
+```text
+<log_path>/config.yaml
+```
+
+so this is enough, and test is always set n_env=1:
+
+```bash
+python3 run_BDPL_sb3.py \
+  --test \
+  --log_path=logs/sb3_bdp_racing_ppo_4env/20260514_163142\
+  --num_test_episode=10 \
+  --play_mode=1 \
+  --test_last
+
+```bash
+python3 run_BDPL_sb3.py \
+  --test \
+  --log_path=logs/sb3_bdp_racing_ppo_4env/20260514_163142 \
+  --num_test_episode=10 \
+  --test_last
+```
+
 ## Candidate Observation Format
 
 SB3 expects fixed-shape observation spaces, but BDPL candidate sets can be
@@ -127,6 +193,24 @@ candidate)` pairs.  The only difference from CARLA is that the candidate
 generator is a simple deterministic one-hot sampler instead of a Frenet
 trajectory planner.
 
+Some Gymnasium environments need extra arguments in `gym.make()`.  Put them
+under `environment.gym_make_kwargs`.  For example, CarRacing is continuous by
+default, but Gymnasium can expose a discrete 5-action version:
+
+```yaml
+environment:
+  env_source: gymnasium
+  env: CarRacing-v3
+  gym_make_kwargs:
+    continuous: false
+```
+
+This runner passes those key/value pairs into:
+
+```python
+gym.make(env, **gym_make_kwargs)
+```
+
 ## Installation Notes
 
 Use a PyTorch/SB3 environment, not the old TensorFlow 1.14 environment.
@@ -142,6 +226,12 @@ For TRPO:
 ```bash
 pip install stable-baselines3 sb3-contrib gymnasium[classic-control]
 ```
+
+For more env like car racing:
+'''
+pip install swig
+pip install "gymnasium[box2d]"
+'''
 
 Legacy Gym environments can also be used with `--env_source=gym` if `gym` is
 installed.  The wrapper includes a small compatibility adapter for classic
@@ -225,6 +315,7 @@ In this runner, `n_steps` is set by `--trpo_timesteps_per_batch`.
 
 Use `--vec_env=dummy` for multiple envs in one process, or `--vec_env=subproc`
 for process-level parallelism:
+note: SB3 num_timesteps=20000 means total env steps across all parallel envs, not 20000 per env.
 
 ```bash
 python3 run_BDPL_sb3.py \
@@ -252,12 +343,78 @@ python3 run_BDPL_sb3.py \
   --env_source=gymnasium \
   --env=CartPole-v1 \
   --sb3_algorithm=PPO \
-  --log_path=logs/sb3_bdp_cartpole_ppo/20260514_153000 \
+  --log_path=logs/sb3_bdp_cartpole_ppo_4env/20260514_115621 \
   --num_test_episode=10
 ```
 
 By default, testing loads the newest `best_*.zip` model.  Use `--test_last` to
 prefer `step_*.zip`, or pass an explicit model with `--test_model`.
+
+## Rendering
+
+Gymnasium environments expose rendering through `render_mode` at environment
+creation time.  `render_mode` says how the environment should render, while
+`play_mode` and `render_train` decide whether rendering is enabled for test or
+training.
+
+For Gymnasium classic-control envs such as CartPole, `render_mode: human` can
+draw automatically during `env.step()`.  The runner therefore only passes
+`render_mode` into the training env when `render_train: true`, and only passes
+it into the test/eval env when `play_mode: 1`.
+
+For visual testing, use:
+
+```yaml
+render:
+  play_mode: 1
+  render_mode: human
+  render_train: false
+  render_freq: 1
+```
+
+Then run test with the config file:
+
+```bash
+python3 run_BDPL_sb3.py \
+  --test \
+  --config_file=agents/reinforcement_learning/sb3_bdp/config.yaml \
+  --log_path=logs/sb3_bdp_cartpole_ppo_4env/20260514_115621 \
+  --num_test_episode=3
+```
+
+For generic Gymnasium/Gym envs, `play_mode: 1` automatically fills
+`render_mode: human` if `render_mode` is empty, but keeping it explicit in the
+config is clearer.
+
+For training render, keep one environment and enable the render callback in
+`config.yaml`:
+
+```yaml
+algorithm:
+  n_envs: 1
+  vec_env: dummy
+
+render:
+  play_mode: 0
+  render_mode: human
+  render_train: true
+  render_freq: 1
+```
+
+Then start training from the config:
+
+```bash
+python3 run_BDPL_sb3.py \
+  --config_file=agents/reinforcement_learning/sb3_bdp/config.yaml
+```
+```bash
+python3 run_BDPL_sb3.py \
+  --config_file=agents/reinforcement_learning/sb3_bdp/config_racing_ppo_demo.yaml
+```
+
+
+Rendering during training is useful for debugging, but it slows training down.
+Use non-rendered training for normal experiments.
 
 ## Useful Arguments
 
@@ -275,16 +432,8 @@ usually be omitted, so it defaults to the number of actions.
 : Activation used by both networks.  Current choices are `tanh` and `relu`.
 
 `--save_freq 5000`
-: Save periodic `step_*_steps.zip` checkpoints every N total timesteps with
-SB3 `CheckpointCallback`.  Use `0` to disable periodic checkpoints.
-
-`--eval_freq 10000`
-: Evaluate every N total timesteps with SB3 `EvalCallback` and save a single
-`best_model.zip` when the evaluation mean reward improves.  Use `0` to disable
-best-model evaluation/saving.
-
-`--n_eval_episodes 5`
-: Number of episodes used by each `EvalCallback` evaluation.
+: Save `step_*.zip` checkpoints every N timesteps.  Best checkpoints are saved
+from SB3 monitor episode rewards.
 
 `--device cpu`
 : Force CPU.  The default `auto` lets SB3 choose.

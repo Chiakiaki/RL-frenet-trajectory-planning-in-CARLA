@@ -57,12 +57,18 @@ python3 ./run_BDPL_sb3.py \
 from __future__ import annotations
 
 import argparse
+import json
 import shutil
 import time
 from pathlib import Path
 from typing import Any, Tuple
 
 from agents.reinforcement_learning.sb3_bdp.callbacks import make_training_callback
+from agents.reinforcement_learning.sb3_bdp.config_io import (
+    find_auto_test_config,
+    load_config_defaults,
+    write_resolved_config,
+)
 from agents.reinforcement_learning.sb3_bdp.envs import make_sb3_env
 from agents.reinforcement_learning.sb3_bdp.model import get_algorithm_class, make_model
 
@@ -76,16 +82,41 @@ def make_run_timestamp() -> str:
 
 def parse_args_cfgs() -> Tuple[argparse.Namespace, Any]:
     global cfg
+    pre_parser = argparse.ArgumentParser(add_help=False)
+    pre_parser.add_argument("--config_file", type=str, default=None)
+    pre_parser.add_argument("--test", default=False, action="store_true")
+    pre_parser.add_argument("--log_path", type=str, default=None)
+    pre_args, _ = pre_parser.parse_known_args()
+    config_file = find_auto_test_config(
+        pre_args.config_file,
+        pre_args.test,
+        pre_args.log_path,
+        CURRENT_PATH,
+    )
+
     parser = argparse.ArgumentParser(
         description="Train/test the BDP candidate planner with Stable-Baselines3."
     )
+    parser.add_argument("--config_file", type=str, default=None, help="SB3 runner YAML config.")
     parser.add_argument("--cfg_file", type=str, default=None, help="Config YAML used by the CARLA env.")
+    parser.add_argument(
+        "--legacy_carla_cfg_file",
+        type=str,
+        default=None,
+        help="Stored CARLA config path used only when --env_source=carla and --cfg_file is omitted.",
+    )
     parser.add_argument("--env", type=str, default="CarlaGymEnv-v5", help="Registered CARLA Gym env id.")
     parser.add_argument(
         "--env_source",
         choices=("carla", "gymnasium", "gym"),
         default="carla",
         help="Use the CARLA planner env, a Gymnasium env, or a legacy Gym env.",
+    )
+    parser.add_argument(
+        "--gym_make_kwargs",
+        type=json.loads,
+        default={},
+        help='Extra kwargs for gym.make(), as JSON. Prefer YAML environment.gym_make_kwargs.',
     )
     parser.add_argument("--agent_id", type=int, default=None)
     parser.add_argument("--test_dir", type=str, default=None)
@@ -95,6 +126,19 @@ def parse_args_cfgs() -> Tuple[argparse.Namespace, Any]:
     parser.add_argument("--log_path", type=str, default=None)
     parser.add_argument("--log_interval", type=int, default=10)
     parser.add_argument("--play_mode", type=int, default=0)
+    parser.add_argument(
+        "--render_mode",
+        choices=("human", "rgb_array"),
+        default=None,
+        help="Gymnasium render mode for generic envs. --play_mode sets this to human when omitted.",
+    )
+    parser.add_argument(
+        "--render_train",
+        default=False,
+        action="store_true",
+        help="Call env.render() during training. Intended for generic envs with --n_envs=1.",
+    )
+    parser.add_argument("--render_freq", type=int, default=1, help="Render every N callback calls during training.")
     parser.add_argument("--verbosity", type=int, default=0)
     parser.add_argument("--test", default=False, action="store_true")
     parser.add_argument("--env_change", type=str, default="None")
@@ -160,8 +204,21 @@ def parse_args_cfgs() -> Tuple[argparse.Namespace, Any]:
     parser.add_argument("--value_layers", type=int, nargs="+", default=[64, 64])
     parser.add_argument("--activation", choices=("tanh", "relu"), default="tanh")
 
-    args = parser.parse_args()
+    load_config_defaults(parser, config_file) # config file, override previous defaults 
+    args = parser.parse_args() # command line
     args.num_timesteps = int(args.num_timesteps)
+
+    if (args.play_mode or args.render_train) and args.render_mode is None and args.env_source != "carla":
+        args.render_mode = "human"
+    if args.render_train and args.env_source != "carla" and args.n_envs != 1:
+        raise ValueError("--render_train for generic envs requires --n_envs=1")
+
+    if args.legacy_carla_cfg_file is None and args.cfg_file is not None:
+        args.legacy_carla_cfg_file = args.cfg_file
+    if args.env_source == "carla" and args.cfg_file is None:
+        args.cfg_file = args.legacy_carla_cfg_file
+    if args.env_source != "carla":
+        args.cfg_file = None
 
     if args.test and args.cfg_file is None and args.env_source == "carla":
         if args.agent_id is not None:
@@ -179,7 +236,7 @@ def parse_args_cfgs() -> Tuple[argparse.Namespace, Any]:
     if args.cfg_file is None and args.env_source == "carla":
         raise ValueError("--cfg_file is required for training")
 
-    if args.cfg_file is not None:
+    if args.env_source == "carla" and args.cfg_file is not None:
         from config import cfg as loaded_cfg
         from config import cfg_from_yaml_file
 
@@ -237,8 +294,12 @@ def copy_reproduction_info(args: argparse.Namespace, log_dir: Path) -> None:
         else:
             f.write("Configuration file:\n\nNone; generic Gym/Gymnasium environment.\n")
         f.write("\nMigration runner: run_BDPL_sb3.py\n")
+        f.write("\nResolved SB3 runner config: config.yaml\n")
+        f.write("Effective SB3 runner config after CLI overrides: resolved_config.yaml\n")
 
-    if args.cfg_file is not None:
+    write_resolved_config(args, log_dir, CURRENT_PATH)
+
+    if args.env_source == "carla" and args.cfg_file is not None:
         shutil.copyfile(args.cfg_file, log_dir / Path(args.cfg_file).name)
 
 
@@ -313,23 +374,27 @@ def run_test(args: argparse.Namespace) -> None:
 
     print(f"{model_path.name} is loading...")
     model = algorithm_class.load(str(model_path), env=env, device=args.device)
+    model_env = model.get_env()
+    if model_env is None:
+        raise RuntimeError("Loaded SB3 model does not have an environment")
     print("Model is loaded")
 
     try:
-        obs, _ = env.reset()
+        obs = model_env.reset()
         episode_count = 0
         while episode_count < args.num_test_episode:
             action, _ = model.predict(obs, deterministic=True)
-            obs, _, done, _, _ = env.step(action)
+            obs, _, dones, _ = model_env.step(action)
             if args.play_mode != 0:
-                env.render()
-            if done:
-                episode_count += 1
-                print(f"{episode_count}/{args.num_test_episode} finished")
-                if episode_count < args.num_test_episode:
-                    obs, _ = env.reset()
+                model_env.render()
+            for done in dones:
+                if done:
+                    episode_count += 1
+                    print(f"{episode_count}/{args.num_test_episode} finished")
+                    if episode_count >= args.num_test_episode:
+                        break
     finally:
-        env.close()
+        model_env.close()
 
 
 if __name__ == "__main__":
