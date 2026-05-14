@@ -106,6 +106,11 @@ used, and SB3 receives the policy name exactly like a normal PPO/TRPO script.
 Use `MlpPolicy` for vector observations such as CartPole and `CnnPolicy` for
 image observations such as CarRacing.
 
+`policy_layers`, `value_layers`, and `activation` are passed as SB3
+`policy_kwargs` in both modes.  In BDP mode, `policy_layers` builds the
+candidate goodness network and `value_layers` builds the critic.  In built-in
+mode, they become SB3's standard actor/critic `net_arch`.
+
 The same switch is available from the command line:
 
 ```bash

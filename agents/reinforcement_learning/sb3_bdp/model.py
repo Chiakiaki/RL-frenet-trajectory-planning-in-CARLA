@@ -37,7 +37,10 @@ def make_model(args: argparse.Namespace, env: Any, model_dir: Path) -> Any:
     policy_mode = getattr(args, "policy_mode", "bdp")
     if policy_mode == "builtin":
         policy = args.builtin_policy
-        policy_kwargs = None
+        policy_kwargs = dict(
+            net_arch=dict(pi=list(args.policy_layers), vf=list(args.value_layers)),
+            activation_fn=activation_from_name(args.activation),
+        )
     else:
         policy = BDPBoltzmannPolicy
         policy_kwargs = dict(
@@ -61,9 +64,8 @@ def make_model(args: argparse.Namespace, env: Any, model_dir: Path) -> Any:
         verbose=1,
         seed=args.seed,
         device=args.device,
+        policy_kwargs=policy_kwargs,
     )
-    if policy_kwargs is not None:
-        common_kwargs["policy_kwargs"] = policy_kwargs
 
     if args.sb3_algorithm == "TRPO":
         if policy_mode == "bdp" and args.sub_sampling_factor != 1:

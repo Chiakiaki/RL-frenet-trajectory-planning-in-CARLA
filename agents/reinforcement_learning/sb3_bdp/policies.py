@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, List, Optional, Tuple, Type
+from typing import Any, Dict, List, Optional, Tuple, Type
 
 import gymnasium as gym
 import numpy as np
@@ -10,19 +10,9 @@ import torch as th
 from gymnasium import spaces
 from stable_baselines3.common.distributions import Distribution
 from stable_baselines3.common.policies import ActorCriticPolicy
+from stable_baselines3.common.torch_layers import create_mlp
 from stable_baselines3.common.type_aliases import PyTorchObs, Schedule
 from torch import nn
-
-
-def make_mlp(input_dim: int, layer_sizes: Iterable[int], activation_fn: Type[nn.Module], output_dim: int) -> nn.Sequential:
-    layers: List[nn.Module] = []
-    last_dim = int(input_dim)
-    for layer_size in layer_sizes:
-        layers.append(nn.Linear(last_dim, int(layer_size)))
-        layers.append(activation_fn())
-        last_dim = int(layer_size)
-    layers.append(nn.Linear(last_dim, int(output_dim)))
-    return nn.Sequential(*layers)
 
 
 def init_mlp(module: nn.Module, output_gain: float = 1.0) -> None:
@@ -111,15 +101,26 @@ class BDPBoltzmannPolicy(ActorCriticPolicy):
         pi_layers, vf_layers = self._resolve_architectures()
         # goodness_net input:  (B*K, Ds + Da)
         # goodness_net output: (B*K, 1), then reshaped to (B, K) logits.
-        self.goodness_net = make_mlp(
-            self.state_dim + self.candidate_dim,
-            pi_layers,
-            self.activation_fn,
-            output_dim=1,
+        # Use SB3's own MLP constructor so BDP and built-in policy modes share
+        # the same interpretation of net_arch/activation_fn as much as possible.
+        self.goodness_net = nn.Sequential(
+            *create_mlp(
+                input_dim=self.state_dim + self.candidate_dim,
+                output_dim=1,
+                net_arch=pi_layers,
+                activation_fn=self.activation_fn,
+            )
         )
         # value_net input:  (B, Ds)
         # value_net output: (B, 1)
-        self.value_net = make_mlp(self.state_dim, vf_layers, self.activation_fn, output_dim=1)
+        self.value_net = nn.Sequential(
+            *create_mlp(
+                input_dim=self.state_dim,
+                output_dim=1,
+                net_arch=vf_layers,
+                activation_fn=self.activation_fn,
+            )
+        )
 
         if self.ortho_init:
             init_mlp(self.goodness_net, output_gain=0.01)
