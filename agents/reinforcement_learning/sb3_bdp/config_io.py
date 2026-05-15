@@ -88,6 +88,10 @@ def load_config_defaults(parser: argparse.ArgumentParser, config_file: Optional[
     parser.set_defaults(**defaults)
 
 
+def optional_list(value: Any) -> Optional[list[Any]]:
+    return None if value is None else list(value)
+
+
 def build_resolved_config(args: argparse.Namespace) -> Dict[str, Any]:
     return {
         "environment": {
@@ -136,8 +140,8 @@ def build_resolved_config(args: argparse.Namespace) -> Dict[str, Any]:
             "policy_mode": args.policy_mode,
             "policy_class": "BDPBoltzmannPolicy" if args.policy_mode == "bdp" else args.builtin_policy,
             "builtin_policy": args.builtin_policy,
-            "policy_layers": list(args.policy_layers),
-            "value_layers": list(args.value_layers),
+            "policy_layers": optional_list(args.policy_layers),
+            "value_layers": optional_list(args.value_layers),
             "activation": args.activation,
             "candidate_sampler": "DiscreteOneHotExternalSampler" if args.policy_mode == "bdp" else None,
         },

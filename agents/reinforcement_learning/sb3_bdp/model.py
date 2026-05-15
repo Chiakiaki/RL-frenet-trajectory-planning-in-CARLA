@@ -7,9 +7,10 @@ from pathlib import Path
 from typing import Any, Type
 
 from stable_baselines3 import PPO
+from stable_baselines3.common.torch_layers import NatureCNN
 from torch import nn
 
-from .policies import BDPBoltzmannPolicy, BDPCnnBoltzmannPolicy
+from .policies import BDPBoltzmannPolicy
 
 
 def activation_from_name(name: str) -> Type[nn.Module]:
@@ -32,15 +33,21 @@ def get_algorithm_class(name: str) -> Type[Any]:
     raise ValueError(f"Unsupported SB3 algorithm: {name}")
 
 
-def get_bdp_policy_class(builtin_policy: str) -> Type[Any]:
-    if builtin_policy == "MlpPolicy":
-        return BDPBoltzmannPolicy
-    if builtin_policy == "CnnPolicy":
-        return BDPCnnBoltzmannPolicy
-    raise ValueError(
-        "BDP mode currently supports builtin_policy=MlpPolicy or CnnPolicy. "
-        f"Got {builtin_policy}."
+def policy_net_arch(args: argparse.Namespace) -> Any:
+    if args.policy_layers is None and args.value_layers is None:
+        return None
+    return dict(pi=list(args.policy_layers or []), vf=list(args.value_layers or []))
+
+
+def policy_kwargs_for(args: argparse.Namespace, policy_mode: str) -> dict[str, Any]:
+    kwargs = dict(
+        net_arch=policy_net_arch(args),
+        activation_fn=activation_from_name(args.activation),
+        normalize_images=args.builtin_policy == "CnnPolicy",
     )
+    if args.builtin_policy == "CnnPolicy":
+        kwargs["features_extractor_class"] = NatureCNN
+    return kwargs
 
 
 def make_model(args: argparse.Namespace, env: Any, model_dir: Path) -> Any:
@@ -48,17 +55,14 @@ def make_model(args: argparse.Namespace, env: Any, model_dir: Path) -> Any:
     policy_mode = getattr(args, "policy_mode", "bdp")
     if policy_mode == "builtin":
         policy = args.builtin_policy
-        policy_kwargs = dict(
-            net_arch=dict(pi=list(args.policy_layers), vf=list(args.value_layers)),
-            activation_fn=activation_from_name(args.activation),
-        )
     else:
-        policy = get_bdp_policy_class(args.builtin_policy)
-        policy_kwargs = dict(
-            net_arch=dict(pi=list(args.policy_layers), vf=list(args.value_layers)),
-            activation_fn=activation_from_name(args.activation),
-            normalize_images=args.builtin_policy == "CnnPolicy",
-        )
+        if args.builtin_policy not in ("MlpPolicy", "CnnPolicy"):
+            raise ValueError(
+                "BDP mode currently supports builtin_policy=MlpPolicy or CnnPolicy. "
+                f"Got {args.builtin_policy}."
+            )
+        policy = BDPBoltzmannPolicy
+    policy_kwargs = policy_kwargs_for(args, policy_mode)
 
     # n_steps is the rollout collection length for the inner data-collection loop of on-policy algorithms like PPO/TRPO
     # in sb3,rollout batch size should be n_steps * n_envs

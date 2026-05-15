@@ -15,6 +15,74 @@ from stable_baselines3.common.torch_layers import BaseFeaturesExtractor, MlpExtr
 from stable_baselines3.common.type_aliases import PyTorchObs, Schedule
 from torch import nn
 
+
+# Architecture guide for maintainers, if with config:
+#   policy_layers: [64, 64]
+#   value_layers:  [64, 64]
+# Then, architectures are as follows
+#
+# Built-in SB3 MLP policy:
+#   Actor:
+#     raw state -> FlattenExtractor -> state_features
+#     state_features -> MlpExtractor actor trunk:
+#       Linear(state_dim -> 64) -> activation
+#       Linear(64 -> 64)        -> activation
+#     latent_pi -> action_net -> raw-action logits
+#   Critic:
+#     raw state -> FlattenExtractor -> state_features
+#     state_features -> MlpExtractor critic trunk:
+#       Linear(state_dim -> 64) -> activation
+#       Linear(64 -> 64)        -> activation
+#     latent_vf -> value_net -> V(s)
+#
+# BDP MLP policy:
+#   Actor:
+#     raw state -> FlattenExtractor -> state_features
+#     [state_features, candidate] -> MlpExtractor actor trunk:
+#       Linear(state_dim + candidate_dim -> 64) -> activation
+#       Linear(64 -> 64)                        -> activation
+#     latent_pi -> goodness_net -> candidate logit
+#   Critic:
+#     raw state -> FlattenExtractor -> state_features
+#     state_features -> value_mlp_extractor critic trunk:
+#       Linear(state_dim -> 64) -> activation
+#       Linear(64 -> 64)        -> activation
+#     latent_vf -> value_net -> V(s)
+#
+# Built-in SB3 CNN policy:
+#   Actor:
+#     image state -> NatureCNN -> state_features, usually 512-dim
+#     state_features -> MlpExtractor actor trunk:
+#       Linear(512 -> 64) -> activation
+#       Linear(64 -> 64)  -> activation
+#     latent_pi -> action_net -> raw-action logits
+#   Critic:
+#     image state -> NatureCNN -> state_features, usually 512-dim
+#     state_features -> MlpExtractor critic trunk:
+#       Linear(512 -> 64) -> activation
+#       Linear(64 -> 64)  -> activation
+#     latent_vf -> value_net -> V(s)
+#
+# BDP CNN policy:
+#   Actor:
+#     image state -> NatureCNN -> state_features, usually 512-dim
+#     [state_features, candidate] -> MlpExtractor actor trunk:
+#       Linear(512 + candidate_dim -> 64) -> activation
+#       Linear(64 -> 64)                  -> activation
+#     latent_pi -> goodness_net -> candidate logit
+#   Critic:
+#     image state -> NatureCNN -> state_features, usually 512-dim
+#     state_features -> value_mlp_extractor critic trunk:
+#       Linear(512 -> 64) -> activation
+#       Linear(64 -> 64)  -> activation
+#     latent_vf -> value_net -> V(s)
+#
+# The critic mid-layer structure matches SB3 for the same feature extractor and
+# value_layers.  The actor hidden layer sizes match too, but BDP concatenates a
+# candidate vector to the state features, so the first actor input dimension is
+# different by design.
+
+
 class BDPBoltzmannPolicy(ActorCriticPolicy):
     """
     Actor-critic policy for candidate-action BDP observations.
@@ -58,14 +126,14 @@ class BDPBoltzmannPolicy(ActorCriticPolicy):
 
         net_arch = self.net_arch
         if isinstance(net_arch, dict):
-            pi_layers = net_arch.get("pi", [64, 64])
-            vf_layers = net_arch.get("vf", [64, 64])
+            pi_layers = net_arch.get("pi", [])
+            vf_layers = net_arch.get("vf", [])
         elif isinstance(net_arch, list):
             pi_layers = net_arch
             vf_layers = net_arch
         else:
-            pi_layers = [64, 64]
-            vf_layers = [64, 64]
+            pi_layers = []
+            vf_layers = []
 
         if self.candidate_net_arch is not None:
             pi_layers = self.candidate_net_arch
