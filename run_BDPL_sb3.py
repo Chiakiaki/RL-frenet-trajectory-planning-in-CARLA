@@ -218,6 +218,24 @@ def parse_args_cfgs() -> Tuple[argparse.Namespace, Any]:
     parser.add_argument("--policy_layers", type=int, nargs="+", default=[64, 64])
     parser.add_argument("--value_layers", type=int, nargs="+", default=[64, 64])
     parser.add_argument("--activation", choices=("tanh", "relu"), default="tanh")
+    parser.add_argument(
+        "--features_extractor",
+        choices=("NatureCNN", "EfficientCNN"),
+        default="NatureCNN",
+        help="CNN feature extractor used when --builtin_policy=CnnPolicy, for both builtin and BDP modes.",
+    )
+    parser.add_argument(
+        "--features_dim",
+        type=int,
+        default=None,
+        help="Optional output feature dimension for CNN feature extractors. Omitted keeps extractor default.",
+    )
+    parser.add_argument(
+        "--features_extractor_kwargs",
+        type=json.loads,
+        default={},
+        help='Extra kwargs for the CNN feature extractor, as JSON. Prefer YAML model_architecture.features_extractor_kwargs.',
+    )
 
     load_config_defaults(parser, config_file) # config file, override previous defaults 
     args = parser.parse_args() # command line

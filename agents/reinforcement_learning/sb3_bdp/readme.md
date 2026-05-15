@@ -111,6 +111,26 @@ image observations such as CarRacing.
 candidate goodness network and `value_layers` builds the critic.  In built-in
 mode, they become SB3's standard actor/critic `net_arch`.
 
+When `builtin_policy: CnnPolicy`, both modes also share the same configurable
+CNN feature extractor:
+
+```yaml
+model_architecture:
+  builtin_policy: CnnPolicy
+  features_extractor: NatureCNN     # SB3 default
+  features_dim:
+  features_extractor_kwargs: {}
+```
+
+Use the lighter custom extractor in `feature_extractors.py` with:
+
+```yaml
+model_architecture:
+  builtin_policy: CnnPolicy
+  features_extractor: EfficientCNN
+  features_dim: 128
+```
+
 The same switch is available from the command line:
 
 ```bash
@@ -498,6 +518,15 @@ usually be omitted, so it defaults to the number of actions.
 
 `--activation tanh`
 : Activation used by both networks.  Current choices are `tanh` and `relu`.
+
+`--features_extractor EfficientCNN`
+: CNN state feature extractor used when `--builtin_policy=CnnPolicy`.
+Current choices are `NatureCNN` and `EfficientCNN`, and the setting applies to
+both `--policy_mode=builtin` and `--policy_mode=bdp`.
+
+`--features_dim 128`
+: Optional CNN feature output dimension.  Omit it to keep the selected
+extractor's default.
 
 `--save_freq 5000`
 : Save `step_*.zip` checkpoints every N timesteps.  Best checkpoints are saved

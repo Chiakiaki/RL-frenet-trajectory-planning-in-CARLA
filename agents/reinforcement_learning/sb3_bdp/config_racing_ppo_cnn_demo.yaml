@@ -52,6 +52,12 @@ model_architecture:
   policy_layers: [64, 64]
   value_layers: [64, 64]
   activation: tanh
+  # Used when builtin_policy: CnnPolicy, for both policy_mode: builtin and bdp.
+  # NatureCNN is SB3's default. EfficientCNN is a lighter custom extractor in
+  # agents/reinforcement_learning/sb3_bdp/feature_extractors.py.
+  features_extractor: NatureCNN
+  features_dim:
+  features_extractor_kwargs: {}
   candidate_sampler: DiscreteOneHotExternalSampler
 
 logging:

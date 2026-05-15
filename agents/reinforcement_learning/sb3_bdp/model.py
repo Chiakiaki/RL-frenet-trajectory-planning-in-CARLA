@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Any, Type
+from typing import Any, Dict, Type
 
 from stable_baselines3 import PPO
 from stable_baselines3.common.torch_layers import NatureCNN
 from torch import nn
 
+from .feature_extractors import EfficientCNN
 from .policies import BDPBoltzmannPolicy
 
 
@@ -39,6 +40,25 @@ def policy_net_arch(args: argparse.Namespace) -> Any:
     return dict(pi=list(args.policy_layers or []), vf=list(args.value_layers or []))
 
 
+def feature_extractor_class_from_name(name: str) -> Type[Any]:
+    if name == "NatureCNN":
+        return NatureCNN
+    if name == "EfficientCNN":
+        return EfficientCNN
+    raise ValueError(
+        "Unsupported CNN feature extractor. Use NatureCNN or EfficientCNN. "
+        f"Got {name}."
+    )
+
+
+def feature_extractor_kwargs(args: argparse.Namespace) -> Dict[str, Any]:
+    kwargs = dict(getattr(args, "features_extractor_kwargs", {}) or {})
+    features_dim = getattr(args, "features_dim", None)
+    if features_dim is not None and "features_dim" not in kwargs:
+        kwargs["features_dim"] = int(features_dim)
+    return kwargs
+
+
 def policy_kwargs_for(args: argparse.Namespace, policy_mode: str) -> dict[str, Any]:
     kwargs = dict(
         net_arch=policy_net_arch(args),
@@ -46,7 +66,8 @@ def policy_kwargs_for(args: argparse.Namespace, policy_mode: str) -> dict[str, A
         normalize_images=args.builtin_policy == "CnnPolicy",
     )
     if args.builtin_policy == "CnnPolicy":
-        kwargs["features_extractor_class"] = NatureCNN
+        kwargs["features_extractor_class"] = feature_extractor_class_from_name(args.features_extractor)
+        kwargs["features_extractor_kwargs"] = feature_extractor_kwargs(args)
     return kwargs
 
 

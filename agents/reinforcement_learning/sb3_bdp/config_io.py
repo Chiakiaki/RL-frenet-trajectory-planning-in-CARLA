@@ -143,6 +143,9 @@ def build_resolved_config(args: argparse.Namespace) -> Dict[str, Any]:
             "policy_layers": optional_list(args.policy_layers),
             "value_layers": optional_list(args.value_layers),
             "activation": args.activation,
+            "features_extractor": args.features_extractor,
+            "features_dim": args.features_dim,
+            "features_extractor_kwargs": args.features_extractor_kwargs,
             "candidate_sampler": "DiscreteOneHotExternalSampler" if args.policy_mode == "bdp" else None,
         },
         "logging": {

@@ -42,7 +42,7 @@ algorithm:
   ppo_clip_range: 0.2
   seed:
   device: auto
-  n_envs: 4
+  n_envs: 128
   vec_env: subproc
 
 model_architecture:
@@ -52,10 +52,16 @@ model_architecture:
   policy_layers: [64, 64]
   value_layers: [64, 64]
   activation: tanh
+  # Used when builtin_policy: CnnPolicy, for both policy_mode: builtin and bdp.
+  # NatureCNN is SB3's default. EfficientCNN is a lighter custom extractor in
+  # agents/reinforcement_learning/sb3_bdp/feature_extractors.py.
+  features_extractor: NatureCNN
+  features_dim:
+  features_extractor_kwargs: {}
   candidate_sampler: DiscreteOneHotExternalSampler
 
 logging:
-  log_path: logs/sb3_bdp_racing_TRPO_4env
+  log_path: logs/sb3_bdp_racing_TRPO_cnn_128env
   log_interval: 1
   save_freq: 5000
   eval_freq: 5000
