@@ -6,6 +6,7 @@ from typing import Any
 
 import numpy as np
 from gymnasium import spaces
+from stable_baselines3.common.preprocessing import is_image_space
 
 
 def as_gymnasium_box(box_space: Any, dtype: np.dtype = np.float32) -> spaces.Box:
@@ -25,6 +26,13 @@ def convert_to_gymnasium_space(space: Any) -> spaces.Space:
     """
 
     if isinstance(space, spaces.Box):
+        if is_image_space(space):
+            return spaces.Box(
+                low=np.asarray(space.low, dtype=space.dtype),
+                high=np.asarray(space.high, dtype=space.dtype),
+                shape=space.shape,
+                dtype=space.dtype,
+            )
         return spaces.Box(
             low=np.asarray(space.low, dtype=np.float32),
             high=np.asarray(space.high, dtype=np.float32),
@@ -34,6 +42,15 @@ def convert_to_gymnasium_space(space: Any) -> spaces.Space:
     if isinstance(space, spaces.Discrete):
         return spaces.Discrete(int(space.n), start=int(getattr(space, "start", 0)))
     if hasattr(space, "low") and hasattr(space, "high") and hasattr(space, "shape"):
+        dtype = getattr(space, "dtype", np.float32)
+        candidate = spaces.Box(
+            low=np.asarray(space.low, dtype=dtype),
+            high=np.asarray(space.high, dtype=dtype),
+            shape=space.shape,
+            dtype=dtype,
+        )
+        if is_image_space(candidate):
+            return candidate
         return spaces.Box(
             low=np.asarray(space.low, dtype=np.float32),
             high=np.asarray(space.high, dtype=np.float32),

@@ -9,7 +9,7 @@ from typing import Any, Type
 from stable_baselines3 import PPO
 from torch import nn
 
-from .policies import BDPBoltzmannPolicy
+from .policies import BDPBoltzmannPolicy, BDPCnnBoltzmannPolicy
 
 
 def activation_from_name(name: str) -> Type[nn.Module]:
@@ -32,6 +32,17 @@ def get_algorithm_class(name: str) -> Type[Any]:
     raise ValueError(f"Unsupported SB3 algorithm: {name}")
 
 
+def get_bdp_policy_class(builtin_policy: str) -> Type[Any]:
+    if builtin_policy == "MlpPolicy":
+        return BDPBoltzmannPolicy
+    if builtin_policy == "CnnPolicy":
+        return BDPCnnBoltzmannPolicy
+    raise ValueError(
+        "BDP mode currently supports builtin_policy=MlpPolicy or CnnPolicy. "
+        f"Got {builtin_policy}."
+    )
+
+
 def make_model(args: argparse.Namespace, env: Any, model_dir: Path) -> Any:
     algorithm_class = get_algorithm_class(args.sb3_algorithm)
     policy_mode = getattr(args, "policy_mode", "bdp")
@@ -42,11 +53,11 @@ def make_model(args: argparse.Namespace, env: Any, model_dir: Path) -> Any:
             activation_fn=activation_from_name(args.activation),
         )
     else:
-        policy = BDPBoltzmannPolicy
+        policy = get_bdp_policy_class(args.builtin_policy)
         policy_kwargs = dict(
             net_arch=dict(pi=list(args.policy_layers), vf=list(args.value_layers)),
             activation_fn=activation_from_name(args.activation),
-            normalize_images=False,
+            normalize_images=args.builtin_policy == "CnnPolicy",
         )
 
     # n_steps is the rollout collection length for the inner data-collection loop of on-policy algorithms like PPO/TRPO

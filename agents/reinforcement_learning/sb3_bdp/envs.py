@@ -9,6 +9,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
+from stable_baselines3.common.preprocessing import is_image_space
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 
@@ -346,6 +347,16 @@ class GenericDiscreteCandidateEnv(gym.Env):
         # one-hot Boxes so FrozenLake-like envs also work.
         observation_space = convert_to_gymnasium_space(observation_space)
         if isinstance(observation_space, spaces.Box):
+            if is_image_space(observation_space):
+                # Keep image observations as uint8 [0, 255] so SB3 can apply
+                # the same VecTransposeImage and normalization path used by
+                # built-in CnnPolicy/NatureCNN.
+                return spaces.Box(
+                    low=np.asarray(observation_space.low, dtype=observation_space.dtype),
+                    high=np.asarray(observation_space.high, dtype=observation_space.dtype),
+                    shape=observation_space.shape,
+                    dtype=observation_space.dtype,
+                )
             return spaces.Box(
                 low=np.asarray(observation_space.low, dtype=np.float32),
                 high=np.asarray(observation_space.high, dtype=np.float32),
@@ -376,8 +387,9 @@ class GenericDiscreteCandidateEnv(gym.Env):
             obs = np.zeros(self.raw_observation_space.shape, dtype=np.float32)
             obs[int(raw_obs)] = 1.0
             return obs
-        # Box observation keeps the original shape, then the policy flattens it.
-        return np.asarray(raw_obs, dtype=np.float32)
+        # Image Boxes stay uint8 for CnnPolicy compatibility.  Other Box
+        # observations are float32 and are flattened by the BDP MLP policy.
+        return np.asarray(raw_obs, dtype=self.raw_observation_space.dtype)
 
     def _format_observation(self, raw_obs: Any) -> Dict[str, np.ndarray]:
         # formatted_obs: (obs_shape), later flattened by policy to (Ds,)

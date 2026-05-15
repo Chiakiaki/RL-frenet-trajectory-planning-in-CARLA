@@ -10,10 +10,18 @@ import torch as th
 from gymnasium import spaces
 from stable_baselines3.common.distributions import Distribution
 from stable_baselines3.common.policies import ActorCriticPolicy
-from stable_baselines3.common.preprocessing import preprocess_obs
-from stable_baselines3.common.torch_layers import BaseFeaturesExtractor, MlpExtractor, NatureCNN
+from stable_baselines3.common.torch_layers import create_mlp
 from stable_baselines3.common.type_aliases import PyTorchObs, Schedule
 from torch import nn
+
+
+def init_mlp(module: nn.Module, output_gain: float = 1.0) -> None:
+    linear_layers = [layer for layer in module.modules() if isinstance(layer, nn.Linear)]
+    for idx, layer in enumerate(linear_layers):
+        gain = output_gain if idx == len(linear_layers) - 1 else np.sqrt(2)
+        nn.init.orthogonal_(layer.weight, gain=gain)
+        nn.init.constant_(layer.bias, 0.0)
+
 
 class BDPBoltzmannPolicy(ActorCriticPolicy):
     """
@@ -45,9 +53,6 @@ class BDPBoltzmannPolicy(ActorCriticPolicy):
         value_net_arch: Optional[List[int]] = None,
         **kwargs: Any,
     ):
-        if not isinstance(observation_space, spaces.Dict):
-            raise TypeError("BDPBoltzmannPolicy requires a Dict observation space")
-        self.raw_observation_space = observation_space.spaces["obs"]
         self.candidate_net_arch = candidate_net_arch
         self.value_net_arch = value_net_arch
         super().__init__(observation_space, action_space, lr_schedule, **kwargs)
@@ -73,64 +78,19 @@ class BDPBoltzmannPolicy(ActorCriticPolicy):
             vf_layers = self.value_net_arch
         return list(pi_layers), list(vf_layers)
 
-    def _build_mlp_extractor(self) -> None:
-        """
-        Build the hidden actor/critic trunks with SB3's ``MlpExtractor``.
-
-        The actor trunk receives a flattened ``[state, candidate]`` pair and
-        produces one latent vector per pair.  The critic trunk receives only the
-        flattened state.  This mirrors ``ActorCriticPolicy`` more closely than a
-        monolithic ``goodness_net`` while keeping the BDP action semantics:
-
-            actor:  (B*K, Ds + Da) -> latent_pi -> scalar candidate logit
-            critic: (B,   Ds)      -> latent_vf -> scalar V(s)
-        """
-
-        pi_layers, vf_layers = self._resolve_architectures()
-        self.mlp_extractor = MlpExtractor(
-            feature_dim=self.state_features_dim + self.candidate_dim,
-            net_arch=dict(pi=pi_layers, vf=[]),
-            activation_fn=self.activation_fn,
-            device=self.device,
-        )
-        self.value_mlp_extractor = MlpExtractor(
-            feature_dim=self.state_features_dim,
-            net_arch=dict(pi=[], vf=vf_layers),
-            activation_fn=self.activation_fn,
-            device=self.device,
-        )
-
-    def _setup_state_features(self) -> None:
-        """Use SB3's feature extractor on obs["obs"] as the BDP state feature path."""
-
-        self.state_dim = int(np.prod(self.raw_observation_space.shape))
-        self.state_features_dim = self.features_extractor.features_dim
-
-    def make_features_extractor(self) -> BaseFeaturesExtractor:
-        return self.features_extractor_class(self.raw_observation_space, **self.features_extractor_kwargs)
-
-    def _extract_state_features(self, raw_obs: th.Tensor) -> th.Tensor:
-        preprocessed_obs = preprocess_obs(
-            raw_obs,
-            self.raw_observation_space,
-            normalize_images=self.normalize_images,
-        )
-        return self.features_extractor(preprocessed_obs)
-
     def _build(self, lr_schedule: Schedule) -> None:
         if not isinstance(self.observation_space, spaces.Dict):
             raise TypeError("BDPBoltzmannPolicy requires a Dict observation space")
         if not isinstance(self.action_space, spaces.Discrete):
             raise TypeError("BDPBoltzmannPolicy requires a Discrete action space")
 
-        self.raw_observation_space = self.observation_space.spaces["obs"]
+        raw_obs_space = self.observation_space.spaces["obs"]
         candidate_space = self.observation_space.spaces["candidates"]
         # state_dim Ds: product of the raw observation shape.
         #   CartPole: obs shape (4,)      -> Ds=4
         #   CARLA lidar: obs shape (362,) -> Ds=362
         #   CARLA seq: obs shape (5, 9)   -> Ds=45
-        #   CNN BDP: image obs -> CNN features, so Ds is the CNN feature dim.
-        self._setup_state_features()
+        self.state_dim = int(np.prod(raw_obs_space.shape))
         # max_candidates K: fixed number of rows stored in obs["candidates"].
         # candidate_dim Da: flattened feature length of one candidate row.
         #   Discrete one-hot env with n actions: Da=n_actions
@@ -138,22 +98,33 @@ class BDPBoltzmannPolicy(ActorCriticPolicy):
         self.max_candidates = int(candidate_space.shape[0])
         self.candidate_dim = int(np.prod(candidate_space.shape[1:]))
 
-        self._build_mlp_extractor()
-        self.goodness_net = nn.Linear(self.mlp_extractor.latent_dim_pi, 1)
-        self.value_net = nn.Linear(self.value_mlp_extractor.latent_dim_vf, 1)
+        pi_layers, vf_layers = self._resolve_architectures()
+        # goodness_net input:  (B*K, Ds + Da)
+        # goodness_net output: (B*K, 1), then reshaped to (B, K) logits.
+        # Use SB3's own MLP constructor so BDP and built-in policy modes share
+        # the same interpretation of net_arch/activation_fn as much as possible.
+        self.goodness_net = nn.Sequential(
+            *create_mlp(
+                input_dim=self.state_dim + self.candidate_dim,
+                output_dim=1,
+                net_arch=pi_layers,
+                activation_fn=self.activation_fn,
+            )
+        )
+        # value_net input:  (B, Ds)
+        # value_net output: (B, 1)
+        self.value_net = nn.Sequential(
+            *create_mlp(
+                input_dim=self.state_dim,
+                output_dim=1,
+                net_arch=vf_layers,
+                activation_fn=self.activation_fn,
+            )
+        )
 
         if self.ortho_init:
-            # Same gains as SB3 ActorCriticPolicy: hidden extractor layers use
-            # sqrt(2), action logits start small, and critic output uses 1.0.
-            module_gains = {
-                self.features_extractor: np.sqrt(2),
-                self.mlp_extractor: np.sqrt(2),
-                self.value_mlp_extractor: np.sqrt(2),
-                self.goodness_net: 0.01,
-                self.value_net: 1.0,
-            }
-            for module, gain in module_gains.items():
-                module.apply(lambda submodule, gain=gain: self.init_weights(submodule, gain=gain))
+            init_mlp(self.goodness_net, output_gain=0.01)
+            init_mlp(self.value_net, output_gain=1.0)
 
         self.optimizer = self.optimizer_class(
             self.parameters(),
@@ -167,16 +138,16 @@ class BDPBoltzmannPolicy(ActorCriticPolicy):
         #   raw_obs:    (B, *obs_shape)
         #   candidates: (B, K, *candidate_shape)
         #   mask:       (B, K)
-        raw_obs = obs["obs"]
+        raw_obs = obs["obs"].float()
         candidates = obs["candidates"].float()
         mask = obs["candidate_mask"].float()
 
         # Flatten only the feature dimensions, not the batch:
-        #   state_features: (B, Ds)
-        #   candidates:     (B, K, Da)
-        state_features = self._extract_state_features(raw_obs)
+        #   state:      (B, Ds)
+        #   candidates: (B, K, Da)
+        state = raw_obs.reshape(raw_obs.shape[0], -1)
         candidates = candidates.reshape(candidates.shape[0], candidates.shape[1], -1)
-        return state_features, candidates, mask
+        return state, candidates, mask
 
     def _candidate_logits(self, obs: PyTorchObs) -> th.Tensor:
         state, candidates, mask = self._state_and_candidates(obs)
@@ -195,12 +166,11 @@ class BDPBoltzmannPolicy(ActorCriticPolicy):
         # repeated_state: (B, K, Ds), candidates: (B, K, Da)
         # scorer_input:   (B, K, Ds + Da), one row per (state, candidate)
         scorer_input = th.cat([repeated_state, candidates], dim=-1)
-        # Flatten the first two axes for a normal MLP extractor:
+        # Flatten the first two axes for a normal MLP:
         #   (B, K, Ds + Da) -> (B*K, Ds + Da)
         # Then reshape:
         #   (B*K, 1) -> (B, K)
-        latent_pi = self.mlp_extractor.forward_actor(scorer_input.reshape(batch_size * n_candidates, -1))
-        logits = self.goodness_net(latent_pi)
+        logits = self.goodness_net(scorer_input.reshape(batch_size * n_candidates, -1))
         logits = logits.reshape(batch_size, n_candidates)
 
         # Padding slots get zero probability after the categorical softmax.
@@ -210,10 +180,9 @@ class BDPBoltzmannPolicy(ActorCriticPolicy):
 
     def _values(self, obs: PyTorchObs) -> th.Tensor:
         state, _, _ = self._state_and_candidates(obs)
-        # value_net(value_mlp_extractor(state)): (B, 1), same convention
-        # expected by SB3 on-policy algorithms for critic values.
-        latent_vf = self.value_mlp_extractor.forward_critic(state)
-        return self.value_net(latent_vf)
+        # value_net(state): (B, 1), same convention expected by SB3 on-policy
+        # algorithms for critic values.
+        return self.value_net(state)
 
     def _distribution_from_obs(self, obs: PyTorchObs) -> Distribution:
         # logits: (B, K).  Each row is a Boltzmann/Categorical distribution
@@ -259,42 +228,3 @@ class BDPBoltzmannPolicy(ActorCriticPolicy):
             }
         )
         return data
-
-
-class BDPCnnBoltzmannPolicy(BDPBoltzmannPolicy):
-    """
-    Candidate-action BDP policy with a CNN state feature extractor.
-
-    This is the BDP analogue of SB3's ``ActorCriticCnnPolicy``.  The image
-    state is first processed by ``NatureCNN`` (by default), then each candidate
-    vector is concatenated with the CNN state feature before the BDP goodness
-    head scores it.
-
-        image obs -> NatureCNN -> state_features
-        [state_features, candidate] -> actor MLP -> goodness_net -> logit
-        state_features -> critic MLP -> value_net -> V(s)
-    """
-
-    def __init__(
-        self,
-        observation_space: gym.Space,
-        action_space: gym.Space,
-        lr_schedule: Schedule,
-        candidate_net_arch: Optional[List[int]] = None,
-        value_net_arch: Optional[List[int]] = None,
-        features_extractor_class: Type[BaseFeaturesExtractor] = NatureCNN,
-        features_extractor_kwargs: Optional[Dict[str, Any]] = None,
-        normalize_images: bool = True,
-        **kwargs: Any,
-    ):
-        super().__init__(
-            observation_space,
-            action_space,
-            lr_schedule,
-            candidate_net_arch=candidate_net_arch,
-            value_net_arch=value_net_arch,
-            features_extractor_class=features_extractor_class,
-            features_extractor_kwargs=features_extractor_kwargs,
-            normalize_images=normalize_images,
-            **kwargs,
-        )
