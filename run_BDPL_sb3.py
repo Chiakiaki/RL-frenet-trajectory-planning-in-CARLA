@@ -80,6 +80,41 @@ def make_run_timestamp() -> str:
     return time.strftime("%Y%m%d_%H%M%S")
 
 
+def sanitize_log_component(value: Any) -> str:
+    """Make one config value safe to use as part of a log directory name."""
+    text = str(value) if value is not None else "none"
+    cleaned = "".join(ch if ch.isalnum() or ch in ("-", "_", ".") else "_" for ch in text)
+    return cleaned.strip("_") or "none"
+
+
+def make_auto_log_parent_name(args: argparse.Namespace) -> str:
+    """Build the experiment folder name used by the shorthand ``--log_path=logs/sb3``."""
+    parts = (
+        "sb3",
+        sanitize_log_component(args.policy_mode),
+        sanitize_log_component(args.env),
+        sanitize_log_component(args.sb3_algorithm),
+        sanitize_log_component(args.builtin_policy),
+        f"{int(args.n_envs)}env",
+    )
+    return "_".join(parts)
+
+
+def maybe_expand_auto_log_parent(log_dir: Path, args: argparse.Namespace) -> Path:
+    """Expand ``logs/sb3`` to a descriptive experiment parent folder.
+
+    Example:
+        logs/sb3
+        -> logs/sb3_bdp_CarRacing-v3_TRPO_CnnPolicy_4env
+
+    Other explicit log paths are left unchanged so old commands remain valid.
+    """
+    auto_log_path = (CURRENT_PATH / "logs" / "sb3").resolve(strict=False)
+    if log_dir.resolve(strict=False) != auto_log_path:
+        return log_dir
+    return log_dir.parent / make_auto_log_parent_name(args)
+
+
 def parse_args_cfgs() -> Tuple[argparse.Namespace, Any]:
     global cfg
     pre_parser = argparse.ArgumentParser(add_help=False)
@@ -291,6 +326,7 @@ def prepare_log_dirs(args: argparse.Namespace) -> Tuple[Path, Path]:
         if not log_dir.is_absolute():
             log_dir = CURRENT_PATH / log_dir
         if not args.test:
+            log_dir = maybe_expand_auto_log_parent(log_dir, args)
             log_dir = log_dir / make_run_timestamp()
     else:
         timestamp = make_run_timestamp()

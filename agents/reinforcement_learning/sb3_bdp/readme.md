@@ -51,6 +51,20 @@ overwriting each other.  The model files are saved below:
 logs/sb3_bdp_cartpole_ppo/YYYYmmdd_HHMMSS/models/
 ```
 
+There is one shorthand for experiment naming.  If training uses
+`--log_path=logs/sb3`, the runner first expands that parent folder with the
+active config:
+
+```text
+--log_path=logs/sb3
+
+actual run folder:
+logs/sb3_<policy_mode>_<env>_<algorithm>_<builtin_policy>_<n_envs>env/YYYYmmdd_HHMMSS/
+
+example:
+logs/sb3_bdp_CarRacing-v3_TRPO_CnnPolicy_4env/YYYYmmdd_HHMMSS/
+```
+
 For testing, pass `--log_path` to the specific timestamped run folder you want
 to load.
 

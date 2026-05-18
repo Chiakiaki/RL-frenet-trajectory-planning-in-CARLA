@@ -42,7 +42,7 @@ algorithm:
   ppo_clip_range: 0.2
   seed:
   device: auto
-  n_envs: 4
+  n_envs: 16
   vec_env: subproc
 
 model_architecture:
@@ -61,7 +61,9 @@ model_architecture:
   candidate_sampler: DiscreteOneHotExternalSampler
 
 logging:
-  log_path: logs/sb3_bdp_racing_TRPO_cnn_4env
+  # logs/sb3 is expanded automatically to:
+  # logs/sb3_<policy_mode>_<env>_<algorithm>_<builtin_policy>_<n_envs>env/<timestamp>
+  log_path: logs/sb3
   log_interval: 1
   save_freq: 5000
   eval_freq: 5000
