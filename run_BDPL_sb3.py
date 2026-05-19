@@ -87,32 +87,36 @@ def sanitize_log_component(value: Any) -> str:
     return cleaned.strip("_") or "none"
 
 
-def make_auto_log_parent_name(args: argparse.Namespace) -> str:
-    """Build the experiment folder name used by the shorthand ``--log_path=logs/sb3``."""
+def make_auto_log_experiment_path(args: argparse.Namespace) -> Path:
+    """Build the experiment path used by the shorthand ``--log_path=logs/sb3``."""
+    env_name = sanitize_log_component(args.env)
     parts = (
-        "sb3",
         sanitize_log_component(args.policy_mode),
-        sanitize_log_component(args.env),
         sanitize_log_component(args.sb3_algorithm),
         sanitize_log_component(args.builtin_policy),
         f"{int(args.n_envs)}env",
     )
-    return "_".join(parts)
+    return Path(env_name) / "_".join(parts)
 
 
 def maybe_expand_auto_log_parent(log_dir: Path, args: argparse.Namespace) -> Path:
-    """Expand ``logs/sb3`` to a descriptive experiment parent folder.
+    """Expand a simple log root to a descriptive experiment parent folder.
 
     Example:
-        logs/sb3
-        -> logs/sb3_bdp_CarRacing-v3_TRPO_CnnPolicy_4env
+        logs/demo
+        -> logs/demo/CarRacing-v3/bdp_TRPO_CnnPolicy_4env
 
-    Other explicit log paths are left unchanged so old commands remain valid.
+    Deeper explicit log paths are left unchanged so timestamped test paths and
+    hand-written experiment paths remain valid.
     """
-    auto_log_path = (CURRENT_PATH / "logs" / "sb3").resolve(strict=False)
-    if log_dir.resolve(strict=False) != auto_log_path:
+    logs_root = (CURRENT_PATH / "logs").resolve(strict=False)
+    try:
+        relative_log_dir = log_dir.resolve(strict=False).relative_to(logs_root)
+    except ValueError:
         return log_dir
-    return log_dir.parent / make_auto_log_parent_name(args)
+    if len(relative_log_dir.parts) != 1:
+        return log_dir
+    return log_dir / make_auto_log_experiment_path(args)
 
 
 def parse_args_cfgs() -> Tuple[argparse.Namespace, Any]:

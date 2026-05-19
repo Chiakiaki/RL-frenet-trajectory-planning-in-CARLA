@@ -59,10 +59,10 @@ active config:
 --log_path=logs/sb3
 
 actual run folder:
-logs/sb3_<policy_mode>_<env>_<algorithm>_<builtin_policy>_<n_envs>env/YYYYmmdd_HHMMSS/
+logs/sb3/<env>/<policy_mode>_<algorithm>_<builtin_policy>_<n_envs>env/YYYYmmdd_HHMMSS/
 
 example:
-logs/sb3_bdp_CarRacing-v3_TRPO_CnnPolicy_4env/YYYYmmdd_HHMMSS/
+logs/sb3/CarRacing-v3/bdp_TRPO_CnnPolicy_4env/YYYYmmdd_HHMMSS/
 ```
 
 For testing, pass `--log_path` to the specific timestamped run folder you want

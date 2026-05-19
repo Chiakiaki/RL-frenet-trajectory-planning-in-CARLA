@@ -26,7 +26,7 @@ legacy_carla:
   env_change: None
 
 algorithm:
-  name: TRPO # upper clase pls
+  name: PPO # upper clase pls
   learning_rate: 0.0007
   num_timesteps: 500000
   trpo_timesteps_per_batch: 256

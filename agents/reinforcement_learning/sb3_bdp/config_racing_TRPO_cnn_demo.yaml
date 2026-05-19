@@ -61,9 +61,9 @@ model_architecture:
   candidate_sampler: DiscreteOneHotExternalSampler
 
 logging:
-  # logs/sb3 is expanded automatically to:
-  # logs/sb3_<policy_mode>_<env>_<algorithm>_<builtin_policy>_<n_envs>env/<timestamp>
-  log_path: logs/sb3
+  # logs/demo is expanded automatically to:
+  # logs/demo/<env>/<policy_mode>_<algorithm>_<builtin_policy>_<n_envs>env/<timestamp>
+  log_path: logs/demo
   log_interval: 1
   save_freq: 5000
   eval_freq: 5000
