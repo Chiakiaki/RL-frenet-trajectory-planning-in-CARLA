@@ -28,7 +28,7 @@ legacy_carla:
 algorithm:
   name: TRPO # upper clase pls
   learning_rate: 0.0007
-  num_timesteps: 500000
+  num_timesteps: 1000000
   trpo_timesteps_per_batch: 256
   batch_size: 128
   gamma: 0.99

@@ -518,6 +518,37 @@ python3 run_BDPL_sb3.py \
 Rendering during training is useful for debugging, but it slows training down.
 Use non-rendered training for normal experiments.
 
+## Plot Training Curves
+
+Use `plot_BDPL_sb3.py` to compare reward curves from a log prefix.  It scans
+for timestamped training runs below the prefix, reads all training
+`monitor.csv` files, excludes `test/monitor.csv`, and plots rolling episode
+reward with a shaded standard-deviation band:
+
+```bash
+python3 plot_BDPL_sb3.py \
+  --logdir logs/sb3 \
+  --window_size 20
+```
+
+The `--filter` option matches substrings in the run path.  All filters must
+match:
+
+```bash
+python3 plot_BDPL_sb3.py \
+  --logdir logs/sb3 \
+  --filter PPO
+
+python3 plot_BDPL_sb3.py \
+  --logdir logs/sb3 \
+  --filter builtin PPO
+
+python3 plot_BDPL_sb3.py \
+  --logdir /logs/sb3 \
+  --filter CnnPolicy \
+  --output logs/sb3/reward_comparison_CnnPolicy.png
+```
+
 ## Useful Arguments
 
 `--max_candidates`
